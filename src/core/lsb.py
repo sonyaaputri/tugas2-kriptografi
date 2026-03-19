@@ -6,29 +6,7 @@ import cv2
 import numpy as np
 
 from .a51 import a51
-
-# Metadata belum diimplementasi, kalau udah uncomment 1 line dibawah ini sama sesuaiin aja
-# from .metadata import HEADER_BASE_SIZE, build_header, parse_header
-
-# TODO: saat metadata udah diimplementasi hapus yang bawah
-try:
-    from .metadata import HEADER_BASE_SIZE, build_header, parse_header
-    METADATA_ENABLED = True
-except Exception:
-    METADATA_ENABLED = False
-    HEADER_BASE_SIZE = 8
-
-    def build_header(payload_len: int,
-                     is_file: bool,
-                     filename: str,
-                     encrypted: bool,
-                     random_mode: bool) -> bytes:
-        return b""
-
-    def parse_header(data: bytes) -> dict:
-        raise NotImplementedError("Metadata parser belum diimplementasi.")
-    
-#hapus sampe sini
+from .metadata import decode_metadata, encode_metadata, estimate_header_size
 
 
 def_rgb = (3, 3, 2)
@@ -206,20 +184,26 @@ def embed_to_video(
     else:
         payload_to_embed = payload
 
-    # TODO: bikin header kalau udah ada metadata
-    #bawah ini apus aja kalau metadata udah diimplementasi
-    if METADATA_ENABLED:
-        header = build_header(
-            payload_len=len(payload_to_embed),
-            is_file=is_file,
-            filename=filename,
-            encrypted=encrypt,
-            random_mode=random_mode,
-        )
-        full_data = header + payload_to_embed
-    else:
-        full_data = payload_to_embed
-    #apus sampe sini
+    msg_type = "file" if is_file else "text"
+    insert_mode = "random" if random_mode else "sequential"
+    ext = ""
+    if is_file and filename:
+        dot = filename.rfind(".")
+        ext = filename[dot:] if dot != -1 else ""
+
+    header = encode_metadata(
+        msg_type=msg_type,
+        payload_size=len(payload_to_embed),
+        encrypted=encrypt,
+        insert_mode=insert_mode,
+        r_bits=scheme[0],
+        g_bits=scheme[1],
+        b_bits=scheme[2],
+        orig_data=payload,
+        filename=filename if is_file else "",
+        ext=ext,
+    )
+    full_data = header + payload_to_embed
 
     # Validasi kapasitas sebelum mulai penyisipan
     if not validate_capacity(cover_path, full_data, scheme):
@@ -339,13 +323,7 @@ def extract_from_video(
     if not cap.isOpened():
         raise ValueError(f"Gagal membuka video: {stego_path}")
 
-    # kalau metadata udah implementasi apus bawah ini
-    if not METADATA_ENABLED:
-        # TODO: tanpa metadata, payload_len tidak diketahui saat ekstraksi.
-        raise NotImplementedError("Ekstraksi butuh metadata untuk membaca payload_len.")
-    #apus sampe sini
-
-    max_header_bytes = HEADER_BASE_SIZE + 255
+    max_header_bytes = estimate_header_size() + 1024
     bits_needed_header = max_header_bytes * 8
 
     header_bits = _extract_bits_random(
@@ -356,11 +334,10 @@ def extract_from_video(
         stego_key="",
     )
     header_bytes = bits_to_bytes(header_bits[:bits_needed_header])
-    meta = parse_header(header_bytes)
+    meta, header_size = decode_metadata(header_bytes)
 
-    header_size = meta["header_total_size"]
-    payload_len = meta["payload_len"]
-    random_mode = meta["random_mode"]
+    payload_len = meta["size"]
+    random_mode = meta["insert_mode"] == "random"
     total_bits_needed = (header_size + payload_len) * 8
 
     cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
@@ -383,9 +360,15 @@ def extract_from_video(
 
     return {
         "payload": payload_final,
-        "is_file": meta["is_file"],
+        "is_file": meta["msg_type"] == "file",
         "filename": meta["filename"],
         "encrypted": meta["encrypted"],
         "random_mode": random_mode,
         "payload_len": payload_len,
+        "orig_md5": meta.get("orig_md5", ""),
+        "orig_sha256": meta.get("orig_sha256", ""),
+        "r_bits": meta.get("r_bits", scheme[0]),
+        "g_bits": meta.get("g_bits", scheme[1]),
+        "b_bits": meta.get("b_bits", scheme[2]),
     }
+
