@@ -1,4 +1,5 @@
 import math
+import os
 import random
 from typing import Iterable
 
@@ -48,6 +49,63 @@ def bits_to_bytes(bits: Iterable[int]):
         result.append(byte)
     return bytes(result)
 
+def _embed_bits_into_frames(
+    cap: cv2.VideoCapture,
+    out: cv2.VideoWriter,
+    bit_stream: list[int],
+    scheme: tuple[int, int, int],
+    random_mode: bool = False,
+    stego_key: str = "",
+):
+    bits_per_pixel = sum(scheme)
+    bit_idx = 0
+    total_bits = len(bit_stream)
+    done = False
+
+    while True:
+        ret, frame = cap.read()
+        if not ret:
+            break
+
+        if not done:
+            h, w = frame.shape[:2]
+            total_pixels = h * w
+
+            if random_mode and stego_key:
+                pixel_indices = list(range(total_pixels))
+                rng = random.Random(stego_key)
+                rng.shuffle(pixel_indices)
+            else:
+                pixel_indices = list(range(total_pixels))
+
+            frame_flat = frame.reshape(-1, 3)
+
+            for pix_idx in pixel_indices:
+                if bit_idx >= total_bits:
+                    done = True
+                    break
+
+                chunk = bit_stream[bit_idx: bit_idx + bits_per_pixel]
+                while len(chunk) < bits_per_pixel:
+                    chunk.append(0)
+
+                r_new, g_new, b_new = embed_bits_in_pixel(
+                    (
+                        frame_flat[pix_idx][2],
+                        frame_flat[pix_idx][1],
+                        frame_flat[pix_idx][0],
+                    ),
+                    chunk,
+                    scheme,
+                )
+                frame_flat[pix_idx] = [b_new, g_new, r_new]
+                bit_idx += bits_per_pixel
+
+            frame = frame_flat.reshape(h, w, 3)
+
+        out.write(frame)
+
+    return bit_idx
 
 def embed_bits_in_pixel(
     pixel: tuple[int, int, int],
@@ -178,7 +236,6 @@ def embed_to_video(
     ):
     scheme = rgb_bits(scheme)
 
-    #Enkripsi a51 jika dipilih
     if encrypt and a51_key:
         payload_to_embed = a51.encrypt_payload(a51_key, payload)
     else:
@@ -203,17 +260,14 @@ def embed_to_video(
         filename=filename if is_file else "",
         ext=ext,
     )
+
     full_data = header + payload_to_embed
 
-    # Validasi kapasitas sebelum mulai penyisipan
     if not validate_capacity(cover_path, full_data, scheme):
         cap = calculate_capacity(cover_path, scheme)
         raise ValueError(
             f"Data ({len(full_data)} bytes) melebihi kapasitas video ({cap} bytes)."
         )
-
-    bit_stream = bytes_to_bits(full_data)
-    total_bits = len(bit_stream)
 
     cap = cv2.VideoCapture(cover_path)
     if not cap.isOpened():
@@ -222,7 +276,7 @@ def embed_to_video(
     fps = cap.get(cv2.CAP_PROP_FPS)
     width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-    
+
     fourcc = cv2.VideoWriter_fourcc(*"FFV1")
     out = cv2.VideoWriter(output_path, fourcc, fps, (width, height))
 
@@ -236,8 +290,51 @@ def embed_to_video(
             "Gagal membuat AVI lossless. FFV1/HFYU tidak tersedia di sistem ini."
         )
 
+    # Header selalu sequential agar extractor bisa bootstrap metadata
+    header_bits = bytes_to_bits(header)
+    _embed_bits_into_frames(
+        cap=cap,
+        out=out,
+        bit_stream=header_bits,
+        scheme=scheme,
+        random_mode=False,
+        stego_key="",
+    )
+
+    # Payload mengikuti mode yang dipilih
+    cap.release()
+    out.release()
+
+    cap = cv2.VideoCapture(output_path)
+    if not cap.isOpened():
+        raise ValueError(f"Gagal membuka stego sementara: {output_path}")
+
+    fps = cap.get(cv2.CAP_PROP_FPS)
+    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+
+    temp_path = output_path + ".tmp.avi"
+    fourcc = cv2.VideoWriter_fourcc(*"FFV1")
+    out = cv2.VideoWriter(temp_path, fourcc, fps, (width, height))
+
+    if not out.isOpened():
+        fourcc = cv2.VideoWriter_fourcc(*"HFYU")
+        out = cv2.VideoWriter(temp_path, fourcc, fps, (width, height))
+
+    if not out.isOpened():
+        cap.release()
+        raise ValueError(
+            "Gagal membuat AVI lossless sementara. FFV1/HFYU tidak tersedia di sistem ini."
+        )
+
+    header_bits_len = len(header_bits)
     bits_per_pixel = sum(scheme)
-    bit_idx = 0
+    pixels_used_by_header = math.ceil(header_bits_len / bits_per_pixel)
+
+    payload_bits = bytes_to_bits(payload_to_embed)
+
+    first_frame = True
+    payload_idx = 0
     done = False
 
     while True:
@@ -248,29 +345,38 @@ def embed_to_video(
         if not done:
             h, w = frame.shape[:2]
             total_pixels = h * w
-
-            if random_mode and stego_key:
-                pixel_indices = list(range(total_pixels))
-                rng = random.Random(stego_key)
-                rng.shuffle(pixel_indices)
-            else:
-                pixel_indices = list(range(total_pixels))
-
             frame_flat = frame.reshape(-1, 3)
 
-            for pix_idx in pixel_indices:
-                if bit_idx >= total_bits:
+            if first_frame:
+                available_indices = list(range(pixels_used_by_header, total_pixels))
+                first_frame = False
+            else:
+                available_indices = list(range(total_pixels))
+
+            if random_mode and stego_key:
+                rng = random.Random(stego_key)
+                rng.shuffle(available_indices)
+
+            for pix_idx in available_indices:
+                if payload_idx >= len(payload_bits):
                     done = True
                     break
 
-                chunk = bit_stream[bit_idx: bit_idx + bits_per_pixel]
+                chunk = payload_bits[payload_idx: payload_idx + bits_per_pixel]
                 while len(chunk) < bits_per_pixel:
                     chunk.append(0)
 
                 r_new, g_new, b_new = embed_bits_in_pixel(
-                    (frame_flat[pix_idx][2], frame_flat[pix_idx][1], frame_flat[pix_idx][0]), chunk, scheme)
+                    (
+                        frame_flat[pix_idx][2],
+                        frame_flat[pix_idx][1],
+                        frame_flat[pix_idx][0],
+                    ),
+                    chunk,
+                    scheme,
+                )
                 frame_flat[pix_idx] = [b_new, g_new, r_new]
-                bit_idx += bits_per_pixel
+                payload_idx += bits_per_pixel
 
             frame = frame_flat.reshape(h, w, 3)
 
@@ -278,6 +384,8 @@ def embed_to_video(
 
     cap.release()
     out.release()
+
+    os.replace(temp_path, output_path)
 
     return calculate_video_mse_psnr(cover_path, output_path)
 
@@ -288,10 +396,10 @@ def _extract_bits_random(
     scheme: tuple[int, int, int],
     random_mode: bool,
     stego_key: str,
+    skip_pixels_first_frame: int = 0,
     ):
-    #Ekstraksi bit dari video dengan acak berdasarkan stego key
-
     extracted_bits = []
+    first_frame = True
 
     while len(extracted_bits) < bits_needed:
         ret, frame = cap.read()
@@ -302,16 +410,24 @@ def _extract_bits_random(
         total_pix = h * w
         frame_flat = frame.reshape(-1, 3)
 
-        if random_mode and stego_key:
-            pixel_indices = list(range(total_pix))
-            rng = random.Random(stego_key)
-            rng.shuffle(pixel_indices)
+        if first_frame and skip_pixels_first_frame > 0:
+            pixel_indices = list(range(skip_pixels_first_frame, total_pix))
+            first_frame = False
         else:
             pixel_indices = list(range(total_pix))
+            first_frame = False
+
+        if random_mode and stego_key:
+            rng = random.Random(stego_key)
+            rng.shuffle(pixel_indices)
 
         for pix_idx in pixel_indices:
             bits = extract_bits_from_pixel(
-                (frame_flat[pix_idx][2], frame_flat[pix_idx][1], frame_flat[pix_idx][0]),
+                (
+                    frame_flat[pix_idx][2],
+                    frame_flat[pix_idx][1],
+                    frame_flat[pix_idx][0],
+                ),
                 scheme,
             )
             extracted_bits.extend(bits)
@@ -319,7 +435,6 @@ def _extract_bits_random(
                 break
 
     return extracted_bits
-
 
 def extract_from_video(
     stego_path: str,
@@ -343,26 +458,31 @@ def extract_from_video(
         scheme=scheme,
         random_mode=False,
         stego_key="",
+        skip_pixels_first_frame=0,
     )
     header_bytes = bits_to_bytes(header_bits[:bits_needed_header])
     meta, header_size = decode_metadata(header_bytes)
 
     payload_len = meta["size"]
     random_mode = meta["insert_mode"] == "random"
-    total_bits_needed = (header_size + payload_len) * 8
+
+    bits_per_pixel = sum(scheme)
+    header_bits_len = header_size * 8
+    pixels_used_by_header = math.ceil(header_bits_len / bits_per_pixel)
+    payload_bits_needed = payload_len * 8
 
     cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
-    all_bits = _extract_bits_random(
+    payload_bits = _extract_bits_random(
         cap=cap,
-        bits_needed=total_bits_needed,
+        bits_needed=payload_bits_needed,
         scheme=scheme,
         random_mode=random_mode,
         stego_key=stego_key,
+        skip_pixels_first_frame=pixels_used_by_header,
     )
     cap.release()
 
-    all_bytes = bits_to_bytes(all_bits)
-    payload_raw = all_bytes[header_size: header_size + payload_len]
+    payload_raw = bits_to_bytes(payload_bits)[:payload_len]
 
     if meta["encrypted"] and a51_key:
         payload_final = a51.decrypt_payload(a51_key, payload_raw)
@@ -382,4 +502,3 @@ def extract_from_video(
         "g_bits": meta.get("g_bits", scheme[1]),
         "b_bits": meta.get("b_bits", scheme[2]),
     }
-

@@ -292,8 +292,13 @@ class CompareTab(ctk.CTkFrame):
         self._frame_slider.configure(to=self._max_frames)
         self._frame_idx.set(1)
         if psnr_list:
-            self._avg_psnr_var.set(f"{sum(psnr_list)/len(psnr_list):.2f}")
-            self._min_psnr_var.set(f"{min(psnr_list):.2f}")
+            finite_psnr = [p for p in psnr_list if p != float("inf")]
+            if finite_psnr:
+                self._avg_psnr_var.set(f"{sum(finite_psnr)/len(finite_psnr):.2f}")
+                self._min_psnr_var.set(f"{min(finite_psnr):.2f}")
+            else:
+                self._avg_psnr_var.set("inf")
+                self._min_psnr_var.set("inf")
         if mse_list:
             self._avg_mse_var.set(f"{sum(mse_list)/len(mse_list):.4f}")
             self._max_mse_var.set(f"{max(mse_list):.4f}")
@@ -337,18 +342,49 @@ class CompareTab(ctk.CTkFrame):
     def _draw_psnr_chart(self):
         if not HAS_MPL or not self._psnr_list:
             return
+
         try:
+            import math
+
             ax = self._psnr_ax
             ax.clear()
             self._style_axes([ax])
+
             frames = list(range(1, len(self._psnr_list) + 1))
-            ax.plot(frames, self._psnr_list, color=self._c("accent"), linewidth=1.5, alpha=0.9)
-            ax.fill_between(frames, self._psnr_list, min(self._psnr_list) - 1,
-                            color=self._c("accent"), alpha=0.08)
-            avg = sum(self._psnr_list) / len(self._psnr_list)
-            ax.axhline(avg, color=self._c("amber"), linewidth=0.9, linestyle="--", alpha=0.8)
-            ax.set_ylabel("dB", fontsize=8, color=self._c("muted"))
+
+            # hanya untuk plotting: inf -> nan
+            plot_psnr = [
+                float("nan") if (p == float("inf") or math.isinf(p)) else p
+                for p in self._psnr_list
+            ]
+
+            # nilai finite untuk batas sumbu / garis rata-rata
+            finite_psnr = [p for p in self._psnr_list if not math.isinf(p)]
+
+            # plot garis/titik
+            ax.plot(
+                frames,
+                plot_psnr,
+                linestyle="-",
+                marker="o",
+                markersize=4,
+            )
+
+            # atur batas dan avg
+            if finite_psnr:
+                avg = sum(finite_psnr) / len(finite_psnr)
+                ymin = min(finite_psnr) - 1
+                ymax = max(finite_psnr) + 1
+
+                ax.set_ylim(ymin, ymax)
+                ax.axhline(avg, linestyle="--", linewidth=1.0)
+
+            ax.set_xlabel("Frame")
+            ax.set_ylabel("dB")
+            ax.set_title("PSNR per Frame")
+
             self._psnr_fig.canvas.draw_idle()
+
         except Exception:
             pass
 
@@ -369,13 +405,17 @@ class CompareTab(ctk.CTkFrame):
         if not self._psnr_list:
             messagebox.showwarning("No data", "Run analysis first.")
             return
-        path = filedialog.asksaveasfilename(title="Save metrics CSV", defaultextension=".csv",
-                                             filetypes=[("CSV file", "*.csv")])
+        path = filedialog.asksaveasfilename(
+            title="Save metrics CSV",
+            defaultextension=".csv",
+            filetypes=[("CSV file", "*.csv")]
+        )
         if path:
-            with open(path, "w") as f:
+            with open(path, "w", encoding="utf-8", newline="") as f:
                 f.write("frame,psnr_db,mse\n")
                 for i, (p, m) in enumerate(zip(self._psnr_list, self._mse_list), 1):
-                    f.write(f"{i},{p:.4f},{m:.6f}\n")
+                    psnr_txt = "INF" if p == float("inf") else f"{p:.4f}"
+                    f.write(f"{i},{psnr_txt},{m:.6f}\n")
             messagebox.showinfo("Saved", f"Metrics CSV saved to:\n{path}")
 
     def _export_psnr_png(self):

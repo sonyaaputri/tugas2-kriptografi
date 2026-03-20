@@ -1,4 +1,5 @@
 import hashlib
+import math
 
 class a51:
     def __init__(self):
@@ -104,35 +105,28 @@ class a51:
 
     @staticmethod
     def encrypt_payload(key: bytes, payload: bytes):
+        block_size = 228
 
-        block_size = 228 
-
-        key_bits = a51.bytes_to_bits(key) 
+        key_bits = a51.bytes_to_bits(key)
         payload_bits = a51.bytes_to_bits(payload)
-
-        remainder = len(payload_bits) % block_size
-        if remainder != 0:
-            payload_bits += [0] * (block_size - remainder)
 
         cipher = a51()
         encrypted_bits = []
 
-        num_blocks = len(payload_bits) // block_size
+        if not payload_bits:
+            return b""
+
+        num_blocks = math.ceil(len(payload_bits) / block_size)
 
         for block_idx in range(num_blocks):
-            # Fn otomatis 22 bit dari block_idx
-            fn_bits = [(block_idx >> (21 - i)) & 1 for i in range(22)]
+            start = block_idx * block_size
+            end = min(start + block_size, len(payload_bits))
+            block = payload_bits[start:end]
 
-            # Inisialisasi ulang 
+            fn_bits = [(block_idx >> (21 - i)) & 1 for i in range(22)]
             cipher.key_setup(key_bits, fn_bits)
 
-            # Ambil blok payload
-            block = payload_bits[block_idx * block_size:(block_idx + 1) * block_size]
-
-            # Generate keystream 228 bit
-            keystream = cipher.generate_keystream(block_size)
-
-            # XOR payload dengan keystream
+            keystream = cipher.generate_keystream(len(block))
             encrypted_block = [p ^ k for p, k in zip(block, keystream)]
             encrypted_bits.extend(encrypted_block)
 
