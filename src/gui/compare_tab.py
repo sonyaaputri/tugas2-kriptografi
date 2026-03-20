@@ -90,19 +90,19 @@ class CompareTab(ctk.CTkFrame):
                                             fg_color=self._c("surface2"))
         self._frame_slider.pack(fill="x", padx=4, pady=(0, 4))
 
-        nav = ctk.CTkFrame(left, fg_color="transparent")
-        nav.pack(fill="x", padx=4, pady=(2, 8))
-        nav.grid_columnconfigure((0, 1), weight=1)
-        ctk.CTkButton(nav, text="◀ Prev", height=32,
-                       fg_color=self._c("surface3"), text_color=self._c("text"),
-                       hover_color=self._c("surface2"), font=ctk.CTkFont(size=11),
-                       corner_radius=6,
-                       command=lambda: self._step_frame(-1)).grid(row=0, column=0, sticky="ew", padx=(0, 3))
-        ctk.CTkButton(nav, text="Next ▶", height=32,
-                       fg_color=self._c("surface3"), text_color=self._c("text"),
-                       hover_color=self._c("surface2"), font=ctk.CTkFont(size=11),
-                       corner_radius=6,
-                       command=lambda: self._step_frame(1)).grid(row=0, column=1, sticky="ew", padx=(3, 0))
+        # nav = ctk.CTkFrame(left, fg_color="transparent")
+        # nav.pack(fill="x", padx=4, pady=(2, 8))
+        # nav.grid_columnconfigure((0, 1), weight=1)
+        # ctk.CTkButton(nav, text="◀ Prev", height=32,
+        #                fg_color=self._c("surface3"), text_color=self._c("text"),
+        #                hover_color=self._c("surface2"), font=ctk.CTkFont(size=11),
+        #                corner_radius=6,
+        #                command=lambda: self._step_frame(-1)).grid(row=0, column=0, sticky="ew", padx=(0, 3))
+        # ctk.CTkButton(nav, text="Next ▶", height=32,
+        #                fg_color=self._c("surface3"), text_color=self._c("text"),
+        #                hover_color=self._c("surface2"), font=ctk.CTkFont(size=11),
+        #                corner_radius=6,
+        #                command=lambda: self._step_frame(1)).grid(row=0, column=1, sticky="ew", padx=(3, 0))
 
         self._section_label(left, "Frame Metrics")
         self._fm_psnr = StringVar(value="PSNR: —")
