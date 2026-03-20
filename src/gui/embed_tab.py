@@ -6,6 +6,13 @@ import os
 import time
 
 
+def _get_downloads_dir() -> str:
+    downloads = os.path.join(os.path.expanduser("~"), "Downloads")
+    if not os.path.isdir(downloads):
+        downloads = os.path.expanduser("~")
+    return downloads
+
+
 class EmbedTab(ctk.CTkFrame):
     """Tab penyisipan pesan ke dalam video AVI."""
 
@@ -29,8 +36,8 @@ class EmbedTab(ctk.CTkFrame):
         self._b_bits      = IntVar(value=2)
 
         # Data histogram
-        self._hist_cover_frame = None   # np.ndarray (H,W,3) uint8 RGB - cover frame 1
-        self._hist_stego_frame = None   # np.ndarray (H,W,3) uint8 RGB - stego frame 1
+        self._hist_cover_frame = None
+        self._hist_stego_frame = None
 
         self.grid_columnconfigure(0, weight=3)
         self.grid_columnconfigure(1, weight=2)
@@ -259,6 +266,16 @@ class EmbedTab(ctk.CTkFrame):
                        corner_radius=6,
                        command=self._browse_output).grid(row=0, column=1)
 
+        # Label info output path
+        self._out_info_label = ctk.CTkLabel(
+            wrap, text="",
+            text_color=self._c("muted"),
+            font=ctk.CTkFont(size=9),
+            fg_color="transparent", anchor="w",
+            wraplength=220,
+        )
+        self._out_info_label.pack(fill="x", padx=4, pady=(2, 0))
+
         ctk.CTkFrame(wrap, fg_color="transparent", height=12).pack()
 
         self._progress = ctk.CTkProgressBar(wrap, progress_color=self._c("accent"),
@@ -332,7 +349,7 @@ class EmbedTab(ctk.CTkFrame):
             highlightthickness=0)
         self._hist_canvas.pack(fill="x", padx=6, pady=6)
         self._hist_canvas.bind("<Configure>", self._on_hist_resize)
-        
+
         leg = ctk.CTkFrame(wrap, fg_color="transparent")
         leg.pack(fill="x", padx=4, pady=(0, 2))
         for label_text, hex_color in [
@@ -343,10 +360,10 @@ class EmbedTab(ctk.CTkFrame):
             ctk.CTkLabel(leg, text=label_text, text_color=hex_color,
                           font=ctk.CTkFont(size=10),
                           fg_color="transparent").pack(side="left", padx=(0, 10))
-            
+
         self.after(200, self._draw_placeholder_histogram)
 
-        # Activity Load
+        # Activity Log
         self._section_label(wrap, "Activity Log")
         self._log_box = ctk.CTkTextbox(wrap, height=180,
                                         fg_color=self._c("surface2"),
@@ -359,10 +376,6 @@ class EmbedTab(ctk.CTkFrame):
         self._log("Waiting for input…")
 
     def _load_cover_frame(self, video_path):
-        """
-        Thread worker: baca frame pertama dari video pakai OpenCV,
-        lalu tampilkan histogram cover (stego belum ada).
-        """
         try:
             import cv2
             import numpy as np
@@ -391,15 +404,6 @@ class EmbedTab(ctk.CTkFrame):
 
     # Histogram
     def draw_histogram(self, cover_frame, stego_frame):
-        """
-        Dipanggil dari luar setelah embedding selesai.
-        video_handler harus menyertakan frame pertama yang diproses.
-
-        Parameters
-        ----------
-        cover_frame : np.ndarray  (H, W, 3)  uint8  RGB — frame cover asli
-        stego_frame : np.ndarray  (H, W, 3)  uint8  RGB — frame stego hasil embed
-        """
         self._hist_cover_frame = cover_frame
         self._hist_stego_frame = stego_frame
         h, w = cover_frame.shape[:2]
@@ -408,21 +412,15 @@ class EmbedTab(ctk.CTkFrame):
         self.after(0, self._redraw_histogram)
 
     def reset_histogram(self):
-        """
-        Reset ke placeholder — dipanggil saat video baru dipilih
-        sehingga histogram cover lama tidak tertampil.
-        """
         self._hist_cover_frame = None
         self._hist_stego_frame = None
         self.after(0, lambda: self._hist_info_label.configure(text=""))
         self.after(0, self._draw_placeholder_histogram)
 
     def _on_hist_resize(self, event):
-        """Bind <Configure> — redraw saat canvas/panel diresize."""
         self._redraw_histogram()
 
     def _redraw_histogram(self):
-        """Dispatch ke mode yang tepat berdasarkan data yang tersedia."""
         canvas = self._hist_canvas
         canvas.update_idletasks()
         W = canvas.winfo_width()
@@ -439,12 +437,6 @@ class EmbedTab(ctk.CTkFrame):
             self._draw_placeholder_histogram()
 
     def _render_real_histogram(self, canvas, W, H, cover_frame, stego_frame=None):
-        """
-        Render histogram RGB dari numpy array.
-
-        cover_frame  — wajib ada (frame asli dari video masukan)
-        stego_frame  — opsional; jika None hanya cover yang digambar (solid)
-        """
         try:
             import numpy as np
         except ImportError:
@@ -454,7 +446,7 @@ class EmbedTab(ctk.CTkFrame):
         padding   = 2
         max_h     = H - padding * 2
         section_w = W / 3
-        
+
         solid_colors = [self._c("red"), self._c("green"), self._c("blue")]
 
         for ch in range(3):
@@ -478,24 +470,18 @@ class EmbedTab(ctk.CTkFrame):
                 x1 = x0 + bw - 2
 
                 if stego_hist is not None:
-                    # Stego bar (faded)
                     sh  = (stego_hist[i] / max_val) * max_h
                     sy0 = H - padding - sh
                     canvas.create_rectangle(x0, sy0, x1, H - padding,
                                              fill=solid_colors[ch],
                                              outline="", stipple="gray25")
 
-                # Cover bar (solid)
                 ch_h = (cover_hist[i] / max_val) * max_h
                 cy0  = H - padding - ch_h
                 canvas.create_rectangle(x0, cy0, x1, H - padding,
                                          fill=solid_colors[ch], outline="")
 
     def _draw_placeholder_histogram(self):
-        """
-        Bell-curve dummy — ditampilkan sebelum video dimuat.
-        Menggunakan stipple 'gray50' agar terlihat berbeda dari data nyata.
-        """
         import math
         canvas = self._hist_canvas
         canvas.update_idletasks()
@@ -534,7 +520,7 @@ class EmbedTab(ctk.CTkFrame):
                                          fill=color, outline="",
                                          stipple="gray50")
 
-    # Eevent Handlers
+    # Event Handlers
     def _on_msg_type(self, val):
         self._text_frame.pack_forget()
         self._file_frame.pack_forget()
@@ -556,7 +542,6 @@ class EmbedTab(ctk.CTkFrame):
         self._frame_n_entry.configure(state=state)
 
     # File Browsing
-
     def _browse_cover(self):
         path = filedialog.askopenfilename(
             title="Select cover video",
@@ -565,7 +550,15 @@ class EmbedTab(ctk.CTkFrame):
             self._cover_path.set(path)
             self._update_capacity()
             self._log(f"Video loaded: {os.path.basename(path)}")
-            
+
+            base     = os.path.splitext(os.path.basename(path))[0]
+            out_name = f"{base}_stego.avi"
+            out_path = os.path.join(_get_downloads_dir(), out_name)
+            self._output_path.set(out_path)
+            self._out_info_label.configure(
+                text=f"📁 {out_path}")
+            self._log(f"Output → {out_path}")
+
             self.reset_histogram()
             threading.Thread(
                 target=self._load_cover_frame, args=(path,), daemon=True
@@ -579,11 +572,25 @@ class EmbedTab(ctk.CTkFrame):
             self._update_capacity()
 
     def _browse_output(self):
-        path = filedialog.asksaveasfilename(title="Save stego-video as",
-                                             defaultextension=".avi",
-                                             filetypes=[("AVI files", "*.avi")])
+        """Buka dialog Save As dengan default directory = Downloads."""
+        downloads = _get_downloads_dir()
+        current   = self._output_path.get()
+
+        initial_file = os.path.basename(current) if current else "stego_video.avi"
+        initial_dir  = os.path.dirname(current) if current and os.path.isdir(
+            os.path.dirname(current)) else downloads
+
+        path = filedialog.asksaveasfilename(
+            title="Save stego-video as",
+            initialdir=initial_dir,
+            initialfile=initial_file,
+            defaultextension=".avi",
+            filetypes=[("AVI files", "*.avi"), ("MP4 files", "*.mp4"), ("All files", "*.*")],
+        )
         if path:
             self._output_path.set(path)
+            self._out_info_label.configure(text=f"📁 {path}")
+            self._log(f"Output → {path}")
 
     # Capacity
 
@@ -704,12 +711,18 @@ class EmbedTab(ctk.CTkFrame):
             self._log("Embedding complete!")
             self._log(f"PSNR: {result.get('psnr',0):.2f} dB  MSE: {result.get('mse',0):.4f}")
 
+            out = result.get("output", "")
+            self._log(f"Saved → {out}")
+
             cover_frame = result.get("cover_frame")
             stego_frame = result.get("stego_frame")
             if cover_frame is not None and stego_frame is not None:
                 self.draw_histogram(cover_frame, stego_frame)
 
-            messagebox.showinfo("Success", f"Stego-video saved to:\n{result.get('output','')}")
+            messagebox.showinfo(
+                "Success",
+                f"Stego-video saved to:\n{out}"
+            )
 
     def _on_embed_error(self, msg):
         self._embed_btn.configure(state="normal", text="Embed Message")
