@@ -1,7 +1,9 @@
 import customtkinter as ctk
 from tkinter import filedialog, messagebox, StringVar, IntVar, BooleanVar
+import tkinter as tk
 import threading
 import os
+import time
 
 
 class EmbedTab(ctk.CTkFrame):
@@ -26,6 +28,10 @@ class EmbedTab(ctk.CTkFrame):
         self._g_bits      = IntVar(value=3)
         self._b_bits      = IntVar(value=2)
 
+        # Data histogram
+        self._hist_cover_frame = None   # np.ndarray (H,W,3) uint8 RGB - cover frame 1
+        self._hist_stego_frame = None   # np.ndarray (H,W,3) uint8 RGB - stego frame 1
+
         self.grid_columnconfigure(0, weight=3)
         self.grid_columnconfigure(1, weight=2)
         self.grid_columnconfigure(2, weight=2)
@@ -34,6 +40,8 @@ class EmbedTab(ctk.CTkFrame):
         self._build_left()
         self._build_mid()
         self._build_right()
+
+    # helpers
 
     def _c(self, k): return self.C[k]
 
@@ -66,6 +74,8 @@ class EmbedTab(ctk.CTkFrame):
                           state=state, corner_radius=6, height=34)
         e.pack(fill="x", padx=4, pady=(0, 4))
         return e
+
+    # Left Panel
 
     def _build_left(self):
         wrap = self._panel(self, col=0, padx=(12, 6))
@@ -116,16 +126,11 @@ class EmbedTab(ctk.CTkFrame):
         # text frame
         self._text_frame = ctk.CTkFrame(self._msg_container, fg_color="transparent")
         self._text_frame.pack(fill="both", expand=True)
-
         self._msg_text = ctk.CTkTextbox(
-            self._text_frame,
-            height=100,
-            fg_color=self._c("surface2"),
-            border_color=self._c("border"),
-            text_color=self._c("text"),
-            font=ctk.CTkFont(size=12),
-            corner_radius=6,
-            border_width=1,
+            self._text_frame, height=100,
+            fg_color=self._c("surface2"), border_color=self._c("border"),
+            text_color=self._c("text"), font=ctk.CTkFont(size=12),
+            corner_radius=6, border_width=1,
         )
         self._msg_text.pack(fill="both", expand=True, padx=4)
 
@@ -134,12 +139,11 @@ class EmbedTab(ctk.CTkFrame):
         fr = ctk.CTkFrame(self._file_frame, fg_color="transparent")
         fr.pack(fill="x", padx=4)
         fr.grid_columnconfigure(0, weight=1)
-        self._file_entry = ctk.CTkEntry(fr, textvariable=self._file_path, state="readonly",
-                                         fg_color=self._c("surface2"),
-                                         border_color=self._c("border"),
-                                         text_color=self._c("text"),
-                                         font=ctk.CTkFont(size=11),
-                                         corner_radius=6, height=34)
+        self._file_entry = ctk.CTkEntry(
+            fr, textvariable=self._file_path, state="readonly",
+            fg_color=self._c("surface2"), border_color=self._c("border"),
+            text_color=self._c("text"), font=ctk.CTkFont(size=11),
+            corner_radius=6, height=34)
         self._file_entry.grid(row=0, column=0, sticky="ew", padx=(0, 6))
         ctk.CTkButton(fr, text="Browse", width=80, height=34,
                        fg_color=self._c("surface3"), text_color=self._c("text"),
@@ -163,11 +167,10 @@ class EmbedTab(ctk.CTkFrame):
             cell.grid(row=0, column=col, padx=3, pady=2, sticky="ew", ipady=4)
             ctk.CTkLabel(cell, text=ch, text_color=ch_colors[ch],
                           font=ctk.CTkFont(size=11), fg_color="transparent").pack(pady=(6, 0))
-            self._lsb_val_label = ctk.CTkLabel(cell, textvariable=lsb_vars[ch],
-                                                text_color=ch_colors[ch],
-                                                font=ctk.CTkFont(size=20, weight="bold"),
-                                                fg_color="transparent")
-            self._lsb_val_label.pack()
+            ctk.CTkLabel(cell, textvariable=lsb_vars[ch],
+                          text_color=ch_colors[ch],
+                          font=ctk.CTkFont(size=20, weight="bold"),
+                          fg_color="transparent").pack()
             ctk.CTkSlider(cell, from_=1, to=4, number_of_steps=3,
                            variable=lsb_vars[ch],
                            progress_color=ch_colors[ch],
@@ -182,6 +185,8 @@ class EmbedTab(ctk.CTkFrame):
                                         font=ctk.CTkFont(size=10),
                                         fg_color="transparent", anchor="w")
         self._bpp_label.pack(fill="x", padx=4, pady=(4, 0))
+
+    # Mid Panel
 
     def _build_mid(self):
         wrap = self._panel(self, col=1, padx=(6, 6))
@@ -254,7 +259,6 @@ class EmbedTab(ctk.CTkFrame):
                        corner_radius=6,
                        command=self._browse_output).grid(row=0, column=1)
 
-        # Spacer
         ctk.CTkFrame(wrap, fg_color="transparent", height=12).pack()
 
         self._progress = ctk.CTkProgressBar(wrap, progress_color=self._c("accent"),
@@ -271,6 +275,7 @@ class EmbedTab(ctk.CTkFrame):
         )
         self._embed_btn.pack(fill="x", padx=4)
 
+    # Right Panel
     def _build_right(self):
         wrap = self._panel(self, col=2, padx=(6, 12))
 
@@ -301,9 +306,49 @@ class EmbedTab(ctk.CTkFrame):
                           font=ctk.CTkFont(size=18, weight="bold"),
                           fg_color="transparent", anchor="w").pack(anchor="w")
 
-        # Log
+        self._section_label(wrap, "Histogram — Frame 1")
+
+        hdr = ctk.CTkFrame(wrap, fg_color="transparent")
+        hdr.pack(fill="x", padx=4, pady=(0, 4))
+        hdr.grid_columnconfigure(0, weight=1)
+        ctk.CTkLabel(hdr, text="Cover (solid) vs Stego (faded)",
+                     text_color=self._c("muted"),
+                     font=ctk.CTkFont(size=10),
+                     fg_color="transparent", anchor="w").grid(row=0, column=0, sticky="w")
+        self._hist_info_label = ctk.CTkLabel(
+            hdr, text="",
+            text_color=self._c("muted"),
+            font=ctk.CTkFont(size=9),
+            fg_color="transparent", anchor="e")
+        self._hist_info_label.grid(row=0, column=1, sticky="e")
+
+        hist_wrapper = ctk.CTkFrame(wrap, fg_color=self._c("surface2"),
+                                     corner_radius=6, border_width=1,
+                                     border_color=self._c("border"))
+        hist_wrapper.pack(fill="x", padx=4, pady=(0, 4))
+        self._hist_canvas = tk.Canvas(
+            hist_wrapper, height=90,
+            bg=self._c("surface2"),
+            highlightthickness=0)
+        self._hist_canvas.pack(fill="x", padx=6, pady=6)
+        self._hist_canvas.bind("<Configure>", self._on_hist_resize)
+        
+        leg = ctk.CTkFrame(wrap, fg_color="transparent")
+        leg.pack(fill="x", padx=4, pady=(0, 2))
+        for label_text, hex_color in [
+            ("● Red",   self._c("red")),
+            ("● Green", self._c("green")),
+            ("● Blue",  self._c("blue")),
+        ]:
+            ctk.CTkLabel(leg, text=label_text, text_color=hex_color,
+                          font=ctk.CTkFont(size=10),
+                          fg_color="transparent").pack(side="left", padx=(0, 10))
+            
+        self.after(200, self._draw_placeholder_histogram)
+
+        # Activity Load
         self._section_label(wrap, "Activity Log")
-        self._log_box = ctk.CTkTextbox(wrap, height=200,
+        self._log_box = ctk.CTkTextbox(wrap, height=180,
                                         fg_color=self._c("surface2"),
                                         border_color=self._c("border"),
                                         text_color=self._c("text"),
@@ -313,10 +358,186 @@ class EmbedTab(ctk.CTkFrame):
         self._log_box.pack(fill="both", expand=True, padx=4)
         self._log("Waiting for input…")
 
+    def _load_cover_frame(self, video_path):
+        """
+        Thread worker: baca frame pertama dari video pakai OpenCV,
+        lalu tampilkan histogram cover (stego belum ada).
+        """
+        try:
+            import cv2
+            import numpy as np
+
+            cap = cv2.VideoCapture(video_path)
+            ok, frame_bgr = cap.read()
+            cap.release()
+
+            if not ok or frame_bgr is None:
+                self.after(0, lambda: self._log("Histogram: gagal baca frame pertama."))
+                return
+
+            frame_rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
+            self._hist_cover_frame = frame_rgb
+            self._hist_stego_frame = None
+
+            h, w = frame_rgb.shape[:2]
+            self.after(0, lambda: self._hist_info_label.configure(
+                text=f"{w}×{h}px · cover only"))
+            self.after(0, self._redraw_histogram)
+
+        except ImportError:
+            self.after(0, lambda: self._log("Histogram: OpenCV tidak terinstall."))
+        except Exception as e:
+            self.after(0, lambda: self._log(f"Histogram error: {e}"))
+
+    # Histogram
+    def draw_histogram(self, cover_frame, stego_frame):
+        """
+        Dipanggil dari luar setelah embedding selesai.
+        video_handler harus menyertakan frame pertama yang diproses.
+
+        Parameters
+        ----------
+        cover_frame : np.ndarray  (H, W, 3)  uint8  RGB — frame cover asli
+        stego_frame : np.ndarray  (H, W, 3)  uint8  RGB — frame stego hasil embed
+        """
+        self._hist_cover_frame = cover_frame
+        self._hist_stego_frame = stego_frame
+        h, w = cover_frame.shape[:2]
+        self.after(0, lambda: self._hist_info_label.configure(
+            text=f"{w}×{h}px · cover + stego"))
+        self.after(0, self._redraw_histogram)
+
+    def reset_histogram(self):
+        """
+        Reset ke placeholder — dipanggil saat video baru dipilih
+        sehingga histogram cover lama tidak tertampil.
+        """
+        self._hist_cover_frame = None
+        self._hist_stego_frame = None
+        self.after(0, lambda: self._hist_info_label.configure(text=""))
+        self.after(0, self._draw_placeholder_histogram)
+
+    def _on_hist_resize(self, event):
+        """Bind <Configure> — redraw saat canvas/panel diresize."""
+        self._redraw_histogram()
+
+    def _redraw_histogram(self):
+        """Dispatch ke mode yang tepat berdasarkan data yang tersedia."""
+        canvas = self._hist_canvas
+        canvas.update_idletasks()
+        W = canvas.winfo_width()
+        H = canvas.winfo_height()
+        if W < 10 or H < 10:
+            return
+        canvas.delete("all")
+
+        if self._hist_cover_frame is not None:
+            self._render_real_histogram(canvas, W, H,
+                                        self._hist_cover_frame,
+                                        self._hist_stego_frame)
+        else:
+            self._draw_placeholder_histogram()
+
+    def _render_real_histogram(self, canvas, W, H, cover_frame, stego_frame=None):
+        """
+        Render histogram RGB dari numpy array.
+
+        cover_frame  — wajib ada (frame asli dari video masukan)
+        stego_frame  — opsional; jika None hanya cover yang digambar (solid)
+        """
+        try:
+            import numpy as np
+        except ImportError:
+            return
+
+        bins      = 24
+        padding   = 2
+        max_h     = H - padding * 2
+        section_w = W / 3
+        
+        solid_colors = [self._c("red"), self._c("green"), self._c("blue")]
+
+        for ch in range(3):
+            x_off = ch * section_w
+
+            cover_hist, _ = np.histogram(
+                cover_frame[:, :, ch].ravel(), bins=bins, range=(0, 256))
+
+            if stego_frame is not None:
+                stego_hist, _ = np.histogram(
+                    stego_frame[:, :, ch].ravel(), bins=bins, range=(0, 256))
+                max_val = max(cover_hist.max(), stego_hist.max(), 1)
+            else:
+                stego_hist = None
+                max_val    = max(cover_hist.max(), 1)
+
+            bw = section_w / bins
+
+            for i in range(bins):
+                x0 = x_off + i * bw + 1
+                x1 = x0 + bw - 2
+
+                if stego_hist is not None:
+                    # Stego bar (faded)
+                    sh  = (stego_hist[i] / max_val) * max_h
+                    sy0 = H - padding - sh
+                    canvas.create_rectangle(x0, sy0, x1, H - padding,
+                                             fill=solid_colors[ch],
+                                             outline="", stipple="gray25")
+
+                # Cover bar (solid)
+                ch_h = (cover_hist[i] / max_val) * max_h
+                cy0  = H - padding - ch_h
+                canvas.create_rectangle(x0, cy0, x1, H - padding,
+                                         fill=solid_colors[ch], outline="")
+
+    def _draw_placeholder_histogram(self):
+        """
+        Bell-curve dummy — ditampilkan sebelum video dimuat.
+        Menggunakan stipple 'gray50' agar terlihat berbeda dari data nyata.
+        """
+        import math
+        canvas = self._hist_canvas
+        canvas.update_idletasks()
+        W = canvas.winfo_width()
+        H = canvas.winfo_height()
+        if W < 10 or H < 10:
+            return
+
+        canvas.delete("all")
+
+        bins    = 20
+        padding = 2
+        max_h   = H - padding * 2
+
+        channels = [
+            (0.35, 0.18, self._c("red")),
+            (0.50, 0.18, self._c("green")),
+            (0.65, 0.18, self._c("blue")),
+        ]
+
+        for ch_idx, (peak, spread, color) in enumerate(channels):
+            x_start   = ch_idx * (W / 3)
+            section_w = W / 3
+
+            vals  = [math.exp(-0.5 * (((i / bins) - peak + 0.15) / spread) ** 2)
+                     for i in range(bins)]
+            max_v = max(vals) or 1
+            bw    = section_w / bins
+
+            for i, v in enumerate(vals):
+                bar_h = (v / max_v) * max_h * 0.80
+                x0 = x_start + i * bw + 1
+                x1 = x0 + bw - 2
+                y0 = H - padding - bar_h
+                canvas.create_rectangle(x0, y0, x1, H - padding,
+                                         fill=color, outline="",
+                                         stipple="gray50")
+
+    # Eevent Handlers
     def _on_msg_type(self, val):
         self._text_frame.pack_forget()
         self._file_frame.pack_forget()
-
         if val == "Text":
             self._text_frame.pack(fill="both", expand=True)
         else:
@@ -334,13 +555,21 @@ class EmbedTab(ctk.CTkFrame):
         state = "normal" if val == "First N frames" else "disabled"
         self._frame_n_entry.configure(state=state)
 
+    # File Browsing
+
     def _browse_cover(self):
-        path = filedialog.askopenfilename(title="Select cover video",
-                                           filetypes=[("AVI files", "*.avi"), ("All files", "*.*")])
+        path = filedialog.askopenfilename(
+            title="Select cover video",
+            filetypes=[("AVI files", "*.avi"), ("All files", "*.*")])
         if path:
             self._cover_path.set(path)
             self._update_capacity()
             self._log(f"Video loaded: {os.path.basename(path)}")
+            
+            self.reset_histogram()
+            threading.Thread(
+                target=self._load_cover_frame, args=(path,), daemon=True
+            ).start()
 
     def _browse_file(self):
         path = filedialog.askopenfilename(title="Select secret file",
@@ -355,6 +584,8 @@ class EmbedTab(ctk.CTkFrame):
                                              filetypes=[("AVI files", "*.avi")])
         if path:
             self._output_path.set(path)
+
+    # Capacity
 
     def _update_capacity(self):
         bpp = self._r_bits.get() + self._g_bits.get() + self._b_bits.get()
@@ -375,15 +606,19 @@ class EmbedTab(ctk.CTkFrame):
                 text=f"Capacity: {used_mb:.2f} / {cap_mb:.2f} MB  ({int(pct*100)}%)")
             self._cap_bar.set(pct)
         except Exception:
-            self._cap_label.configure(text=f"Capacity: bits/px = {bpp} (load video for exact)")
+            self._cap_label.configure(
+                text=f"Capacity: bits/px = {bpp} (load video for exact)")
+
+    # Logging
 
     def _log(self, msg):
-        import time
         self._log_box.configure(state="normal")
         ts = time.strftime("%H:%M:%S")
         self._log_box.insert("end", f"[{ts}] {msg}\n")
         self._log_box.see("end")
         self._log_box.configure(state="disabled")
+
+    # Embed
 
     def _run_embed(self):
         if not self._cover_path.get():
@@ -415,14 +650,19 @@ class EmbedTab(ctk.CTkFrame):
         self._progress.set(0)
 
         params = {
-            "cover": self._cover_path.get(), "output": self._output_path.get(),
-            "msg_type": msg_type, "msg_data": msg_data,
-            "use_enc": bool(self._enc_switch.get()), "enc_key": self._enc_key.get(),
+            "cover":       self._cover_path.get(),
+            "output":      self._output_path.get(),
+            "msg_type":    msg_type,
+            "msg_data":    msg_data,
+            "use_enc":     bool(self._enc_switch.get()),
+            "enc_key":     self._enc_key.get(),
             "insert_mode": self._insert_mode.get().lower(),
-            "stego_key": self._stego_key.get(),
-            "frame_sel": self._frame_sel.get(), "frame_n": self._frame_n.get(),
-            "r_bits": self._r_bits.get(), "g_bits": self._g_bits.get(),
-            "b_bits": self._b_bits.get(),
+            "stego_key":   self._stego_key.get(),
+            "frame_sel":   self._frame_sel.get(),
+            "frame_n":     self._frame_n.get(),
+            "r_bits":      self._r_bits.get(),
+            "g_bits":      self._g_bits.get(),
+            "b_bits":      self._b_bits.get(),
         }
         threading.Thread(target=self._embed_worker, args=(params,), daemon=True).start()
 
@@ -430,14 +670,21 @@ class EmbedTab(ctk.CTkFrame):
         try:
             from core.video_handler import embed_message
             result = embed_message(
-                cover_path=params["cover"], output_path=params["output"],
-                msg_type=params["msg_type"], msg_data=params["msg_data"],
-                use_enc=params["use_enc"], enc_key=params["enc_key"],
-                insert_mode=params["insert_mode"], stego_key=params["stego_key"],
+                cover_path=params["cover"],
+                output_path=params["output"],
+                msg_type=params["msg_type"],
+                msg_data=params["msg_data"],
+                use_enc=params["use_enc"],
+                enc_key=params["enc_key"],
+                insert_mode=params["insert_mode"],
+                stego_key=params["stego_key"],
                 frame_sel=params["frame_sel"],
                 frame_n=int(params["frame_n"]) if params["frame_n"].isdigit() else 50,
-                r_bits=params["r_bits"], g_bits=params["g_bits"], b_bits=params["b_bits"],
-                progress_cb=self._on_progress, log_cb=self._log,
+                r_bits=params["r_bits"],
+                g_bits=params["g_bits"],
+                b_bits=params["b_bits"],
+                progress_cb=self._on_progress,
+                log_cb=self._log,
             )
             self.after(0, self._on_embed_done, result)
         except Exception as e:
@@ -456,6 +703,12 @@ class EmbedTab(ctk.CTkFrame):
             self._frm_var.set(str(result.get("frames", "—")))
             self._log("Embedding complete!")
             self._log(f"PSNR: {result.get('psnr',0):.2f} dB  MSE: {result.get('mse',0):.4f}")
+
+            cover_frame = result.get("cover_frame")
+            stego_frame = result.get("stego_frame")
+            if cover_frame is not None and stego_frame is not None:
+                self.draw_histogram(cover_frame, stego_frame)
+
             messagebox.showinfo("Success", f"Stego-video saved to:\n{result.get('output','')}")
 
     def _on_embed_error(self, msg):
@@ -465,5 +718,6 @@ class EmbedTab(ctk.CTkFrame):
         self._log(f"Error: {msg}")
         messagebox.showerror("Embed failed", msg)
 
+    # Public Getters
     def get_cover_path(self):  return self._cover_path.get()
     def get_output_path(self): return self._output_path.get()
