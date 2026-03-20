@@ -1,12 +1,3 @@
-"""
-avi_handler.py
-==============
-Jembatan antara GUI (extract_tab.py, embed_tab.py) dan logika inti lsb.py.
-
-- embed_message  : dipanggil oleh embed_tab via core.video_handler.embed_message
-- extract_message: dipanggil langsung oleh extract_tab
-"""
-
 import os
 import cv2
 import numpy as np
@@ -19,10 +10,7 @@ from .lsb import (
     rgb_bits,
 )
 
-
-# ─────────────────────────────────────────────────────────────────────────────
 # Embed
-# ─────────────────────────────────────────────────────────────────────────────
 
 def embed_message(
     cover_path: str,
@@ -59,7 +47,7 @@ def embed_message(
 
     scheme = rgb_bits((r_bits, g_bits, b_bits))
 
-    # --- Baca payload ---
+    # Baca payload 
     if msg_type == "text":
         payload   = msg_data.encode("utf-8")
         is_file   = False
@@ -76,7 +64,7 @@ def embed_message(
     _log(f"Frame selection: {frame_sel}" + (f" (N={frame_n})" if frame_sel == "First N frames" else ""))
     _log(f"Encryption    : {'A5/1' if use_enc else 'None'}")
 
-    # --- Kunci A5/1 ---
+    # Kunci A5/1
     a51_key = None
     if use_enc:
         a51_key = a51.derive_key(enc_key)
@@ -84,13 +72,13 @@ def embed_message(
 
     _progress(5)
 
-    # --- Kapasitas ---
+    # Kapasitas
     cap = calculate_capacity(cover_path, scheme)
     _log(f"Video capacity: {cap:,} bytes")
 
     _progress(10)
 
-    # --- Embed ---
+    # Embed
     _log("Embedding…")
     mse_list, psnr_list, mse_avg, psnr_avg = embed_to_video(
         cover_path   = cover_path,
@@ -107,7 +95,7 @@ def embed_message(
 
     _progress(90)
 
-    # --- Ambil frame pertama untuk histogram ---
+    # Ambil frame pertama untuk histogram
     cover_frame = _read_first_frame_rgb(cover_path)
     stego_frame = _read_first_frame_rgb(output_path)
 
@@ -123,10 +111,7 @@ def embed_message(
         "stego_frame": stego_frame,
     }
 
-
-# ─────────────────────────────────────────────────────────────────────────────
 # Extract
-# ─────────────────────────────────────────────────────────────────────────────
 
 def extract_message(
     stego_path: str,
@@ -156,7 +141,7 @@ def extract_message(
     _log(f"Loading stego-video: {os.path.basename(stego_path)}")
     _progress(5)
 
-    # --- Kunci A5/1 ---
+    # Kunci A5/1
     a51_key = None
     if use_dec:
         a51_key = a51.derive_key(dec_key)
@@ -164,7 +149,7 @@ def extract_message(
 
     _progress(10)
 
-    # --- Ekstraksi ---
+    # Ekstraksi
     _log("Extracting bits…")
     result = extract_from_video(
         stego_path = stego_path,
@@ -185,14 +170,13 @@ def extract_message(
     _log(f"Type     : {'file' if is_file else 'text'}  |  filename: {filename}")
     _log(f"Scheme   : R={r} G={g} B={b}")
 
-    # --- Hitung MSE/PSNR frame pertama saja (cepat) ---
+    # Hitung MSE/PSNR frame pertama saja (cepat)
     psnr_avg = 0.0
     mse_avg  = 0.0
     n_frames = 0
     try:
         from .lsb import calculate_video_mse_psnr
-        # Kita tidak punya cover, jadi tidak bisa hitung. Kembalikan 0.
-        # (PSNR/MSE untuk extract hanya bisa jika cover tersedia — opsional)
+        # PSNR/MSE untuk extract hanya bisa jika cover tersedia
     except Exception:
         pass
 
@@ -217,10 +201,7 @@ def extract_message(
         "frames": n_frames,
     }
 
-
-# ─────────────────────────────────────────────────────────────────────────────
 # Helpers
-# ─────────────────────────────────────────────────────────────────────────────
 
 def _read_first_frame_rgb(video_path: str):
     """Baca frame pertama video sebagai numpy array RGB (H,W,3) uint8."""

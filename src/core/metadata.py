@@ -1,28 +1,3 @@
-"""
-metadata.py (NANTI AKU HAPUS KOMEN NYA, PERLU:D)
-===========
-Modul untuk encoding dan decoding metadata yang disisipkan ke dalam stego-video.
-
-Struktur header binary (little-endian):
-  [4  bytes]  magic          : b'SGAV'
-  [1  byte]   msg_type       : 0 = text, 1 = file
-  [1  byte]   flags          : bit0 = encrypted, bit1 = random_mode
-  [1  byte]   lsb_config     : bit7-5 = r_bits (1-4), bit4-2 = g_bits (1-4), bit1-0 = b_bits-1 (0-3)
-  [2  bytes]  ext_len        : panjang extension string dalam bytes
-  [N  bytes]  ext            : extension string UTF-8 (misal ".pdf"), tanpa null-terminator
-  [2  bytes]  filename_len   : panjang nama file dalam bytes
-  [M  bytes]  filename       : nama file UTF-8
-  [4  bytes]  payload_size   : ukuran payload dalam bytes (sesudah enkripsi jika ada)
-  [32 bytes]  orig_md5       : MD5 hex digest pesan ASLI sebelum enkripsi (ASCII)
-  [64 bytes]  orig_sha256    : SHA-256 hex digest pesan ASLI sebelum enkripsi (ASCII)
-  ──────────────────────────────────────────────────────────────
-  Total: 4+1+1+1+2+N+2+M+4+32+64 = 111 bytes + len(ext) + len(filename)
-
-Catatan penting:
-- Kunci enkripsi A5/1 dan stego-key TIDAK disimpan di sini (sesuai ketentuan tugas).
-- Field lsb_config menyimpan r/g/b bits agar ekstraksi bisa pakai skema LSB yang sama.
-"""
-
 import struct
 import hashlib
 
@@ -41,12 +16,7 @@ _FIXED_SIZE = (
     64    # orig_sha256
 )  # = 111 bytes
 
-
-# ─────────────────────────────────────────────────────────────────────────────
 # Helper hash
-# ─────────────────────────────────────────────────────────────────────────────
-# CATATAN: Jika utils/integrity.py sudah mendefinisikan compute_hashes,
-# hapus fungsi ini dan ganti dengan: from utils.integrity import compute_hashes
 
 def compute_hashes(data: bytes) -> tuple[str, str]:
     """
@@ -60,10 +30,7 @@ def compute_hashes(data: bytes) -> tuple[str, str]:
     sha256 = hashlib.sha256(data).hexdigest()  # selalu 64 karakter
     return md5, sha256
 
-
-# ─────────────────────────────────────────────────────────────────────────────
 # LSB config byte helpers (internal)
-# ─────────────────────────────────────────────────────────────────────────────
 
 def _encode_lsb_config(r_bits: int, g_bits: int, b_bits: int) -> int:
     """
@@ -102,10 +69,7 @@ def _decode_lsb_config(config_byte: int) -> tuple[int, int, int]:
         )
     return r_bits, g_bits, b_bits
 
-
-# ─────────────────────────────────────────────────────────────────────────────
 # Encode metadata → bytes
-# ─────────────────────────────────────────────────────────────────────────────
 
 def encode_metadata(
     msg_type: str,        # "text" atau "file"
@@ -162,10 +126,7 @@ def encode_metadata(
     )
     return header
 
-
-# ─────────────────────────────────────────────────────────────────────────────
 # Decode bytes → dict metadata
-# ─────────────────────────────────────────────────────────────────────────────
 
 def decode_metadata(data: bytes) -> tuple[dict, int]:
     """
@@ -190,7 +151,7 @@ def decode_metadata(data: bytes) -> tuple[dict, int]:
     """
     offset = 0
 
-    # ── magic ──────────────────────────────────────────────────────────────
+    # magic
     if len(data) < 4:
         raise ValueError("Data terlalu pendek untuk header StegoAVI.")
     if data[offset:offset + 4] != MAGIC:
@@ -201,39 +162,39 @@ def decode_metadata(data: bytes) -> tuple[dict, int]:
         )
     offset += 4
 
-    # ── msg_type ───────────────────────────────────────────────────────────
+    # msg_type
     type_byte = struct.unpack_from("<B", data, offset)[0]
     offset += 1
     msg_type = "text" if type_byte == 0 else "file"
 
-    # ── flags ──────────────────────────────────────────────────────────────
+    # flags
     flags = struct.unpack_from("<B", data, offset)[0]
     offset += 1
     encrypted   = bool(flags & 0b00000001)
     insert_mode = "random" if (flags & 0b00000010) else "sequential"
 
-    # ── lsb_config ─────────────────────────────────────────────────────────
+    # lsb_config
     config_byte        = struct.unpack_from("<B", data, offset)[0]
     offset += 1
     r_bits, g_bits, b_bits = _decode_lsb_config(config_byte)
 
-    # ── ext ────────────────────────────────────────────────────────────────
+    # ext
     ext_len = struct.unpack_from("<H", data, offset)[0]
     offset += 2
     ext = data[offset:offset + ext_len].decode("utf-8")
     offset += ext_len
 
-    # ── filename ───────────────────────────────────────────────────────────
+    # filename
     filename_len = struct.unpack_from("<H", data, offset)[0]
     offset += 2
     filename = data[offset:offset + filename_len].decode("utf-8")
     offset += filename_len
 
-    # ── payload_size ───────────────────────────────────────────────────────
+    # payload_size
     payload_size = struct.unpack_from("<I", data, offset)[0]
     offset += 4
 
-    # ── hashes ─────────────────────────────────────────────────────────────
+    # hashes
     orig_md5    = data[offset:offset + 32].decode("ascii")
     offset += 32
     orig_sha256 = data[offset:offset + 64].decode("ascii")
@@ -257,10 +218,7 @@ def decode_metadata(data: bytes) -> tuple[dict, int]:
     }
     return meta, offset
 
-
-# ─────────────────────────────────────────────────────────────────────────────
 # Utilitas
-# ─────────────────────────────────────────────────────────────────────────────
 
 def estimate_header_size(filename: str = "", ext: str = "") -> int:
     """

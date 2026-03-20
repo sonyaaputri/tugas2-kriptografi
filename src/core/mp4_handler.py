@@ -1,20 +1,3 @@
-"""
-mp4_handler.py
-==============
-BONUS: Penyisipan dan ekstraksi LSB pada video MP4 (lossy).
-
-Karena MP4 bersifat lossy, perubahan bit-level pada frame yang sudah dikompres
-tidak akan bertahan setelah re-encode. Strategi yang digunakan:
-  - Decode setiap frame → modifikasi piksel (LSB) → encode ulang dengan
-    kualitas setinggi mungkin (CRF rendah / bitrate tinggi) menggunakan
-    codec H.264 via OpenCV (fourcc=mp4v) atau ffmpeg-python jika tersedia.
-  - Karena lossy, integritas data tidak dijamin 100%. Disarankan menggunakan
-    AVI untuk kebutuhan kritis.
-
-Antarmuka (embed_message / extract_message) identik dengan avi_handler.py
-sehingga GUI dapat memanggil keduanya secara seragam.
-"""
-
 import os
 import cv2
 import numpy as np
@@ -28,10 +11,7 @@ from .lsb import (
     calculate_video_mse_psnr,
 )
 
-
-# ─────────────────────────────────────────────────────────────────────────────
 # Embed
-# ─────────────────────────────────────────────────────────────────────────────
 
 def embed_message_mp4(
     cover_path: str,
@@ -71,7 +51,7 @@ def embed_message_mp4(
     if not output_path.lower().endswith(".mp4"):
         output_path = os.path.splitext(output_path)[0] + ".mp4"
 
-    # --- Baca payload ---
+    # Baca payload 
     if msg_type == "text":
         payload  = msg_data.encode("utf-8")
         is_file  = False
@@ -86,7 +66,7 @@ def embed_message_mp4(
     _log(f"[MP4] Scheme   : R={scheme[0]} G={scheme[1]} B={scheme[2]}")
     _log("[MP4] PERINGATAN: MP4 bersifat lossy; integritas data tidak dijamin.")
 
-    # --- Kunci A5/1 ---
+    # Kunci A5/1
     a51_key = None
     if use_enc:
         a51_key = a51.derive_key(enc_key)
@@ -94,13 +74,13 @@ def embed_message_mp4(
 
     _progress(5)
 
-    # --- Kapasitas ---
+    # Kapasitas
     cap_bytes = calculate_capacity(cover_path, scheme)
     _log(f"[MP4] Capacity : {cap_bytes:,} bytes")
 
     _progress(10)
 
-    # --- Embed menggunakan lsb.embed_to_video dengan fourcc mp4v ---
+    # Embed menggunakan lsb.embed_to_video dengan fourcc mp4v
     _log("[MP4] Embedding…")
 
     # Buka cover untuk metadata video
@@ -112,11 +92,7 @@ def embed_message_mp4(
     height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     cap.release()
 
-    # embed_to_video menulis AVI secara default; untuk MP4 kita override fourcc
-    # Kita gunakan tmp AVI lalu konversi, atau langsung pakai mp4v writer.
-    # Pendekatan: gunakan lsb.embed_to_video dengan sedikit patch output path.
-    # Karena embed_to_video menggunakan XVID secara internal, kita buat wrapper
-    # yang menulis langsung mp4v.
+    # Karena embed_to_video menggunakan XVID secara internal, buat wrapper yang menulis langsung mp4v.
 
     from .metadata import encode_metadata, estimate_header_size
     from .lsb import bytes_to_bits, bits_to_bytes, embed_bits_in_pixel
@@ -221,10 +197,7 @@ def embed_message_mp4(
         "stego_frame": stego_frame,
     }
 
-
-# ─────────────────────────────────────────────────────────────────────────────
 # Extract
-# ─────────────────────────────────────────────────────────────────────────────
 
 def extract_message_mp4(
     stego_path: str,
@@ -298,10 +271,7 @@ def extract_message_mp4(
         "frames": 0,
     }
 
-
-# ─────────────────────────────────────────────────────────────────────────────
 # Helpers
-# ─────────────────────────────────────────────────────────────────────────────
 
 def _read_first_frame_rgb(video_path: str):
     cap = cv2.VideoCapture(video_path)

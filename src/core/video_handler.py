@@ -1,25 +1,8 @@
-"""
-core/video_handler.py
-=====================
-Jembatan tingkat tinggi antara GUI dan handler spesifik format (AVI / MP4).
-
-Fungsi yang diekspor:
-  embed_message(...)   — dipanggil oleh EmbedTab._embed_worker
-  load_frames(path)    — dipanggil oleh CompareTab._analysis_worker
-
-Logika pemilihan format:
-  - AVI → avi_handler.embed_message
-  - MP4 → mp4_handler.embed_message_mp4
-"""
-
 import os
 import cv2
 import numpy as np
 
-
-# ─────────────────────────────────────────────────────────────────────────────
 # embed_message
-# ─────────────────────────────────────────────────────────────────────────────
 
 def embed_message(
     cover_path: str,
@@ -76,10 +59,7 @@ def embed_message(
         from .avi_handler import embed_message
         return embed_message(**common)
 
-
-# ─────────────────────────────────────────────────────────────────────────────
 # load_frames
-# ─────────────────────────────────────────────────────────────────────────────
 
 def load_frames(video_path: str) -> list:
     """
