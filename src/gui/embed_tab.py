@@ -552,7 +552,7 @@ class EmbedTab(ctk.CTkFrame):
             self._log(f"Video loaded: {os.path.basename(path)}")
 
             base     = os.path.splitext(os.path.basename(path))[0]
-            out_name = f"{base}_stego.avi"
+            out_name = f"{base}_embedded.avi"
             out_path = os.path.join(_get_downloads_dir(), out_name)
             self._output_path.set(out_path)
             self._out_info_label.configure(
