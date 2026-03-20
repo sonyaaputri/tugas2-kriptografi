@@ -148,16 +148,16 @@ class CompareTab(ctk.CTkFrame):
         )
         self._analyze_btn.pack(fill="x", padx=4, pady=(0, 6))
 
-        ctk.CTkButton(left, text="Export Histogram PNG", height=34,
-                       fg_color=self._c("surface3"), text_color=self._c("muted"),
-                       hover_color=self._c("surface2"), font=ctk.CTkFont(size=11),
-                       corner_radius=6,
-                       command=self._export_hist_png).pack(fill="x", padx=4, pady=(0, 4))
-        ctk.CTkButton(left, text="Export Metrics CSV", height=34,
-                       fg_color=self._c("surface3"), text_color=self._c("muted"),
-                       hover_color=self._c("surface2"), font=ctk.CTkFont(size=11),
-                       corner_radius=6,
-                       command=self._export_csv).pack(fill="x", padx=4)
+        # ctk.CTkButton(left, text="Export Histogram PNG", height=34,
+        #                fg_color=self._c("surface3"), text_color=self._c("muted"),
+        #                hover_color=self._c("surface2"), font=ctk.CTkFont(size=11),
+        #                corner_radius=6,
+        #                command=self._export_hist_png).pack(fill="x", padx=4, pady=(0, 4))
+        # ctk.CTkButton(left, text="Export Metrics CSV", height=34,
+        #                fg_color=self._c("surface3"), text_color=self._c("muted"),
+        #                hover_color=self._c("surface2"), font=ctk.CTkFont(size=11),
+        #                corner_radius=6,
+        #                command=self._export_csv).pack(fill="x", padx=4)
 
     def _build_charts(self):
         right = ctk.CTkFrame(self, corner_radius=0, fg_color=self._c("bg"))
@@ -168,22 +168,28 @@ class CompareTab(ctk.CTkFrame):
 
         if not HAS_MPL:
             ctk.CTkLabel(right, text="matplotlib not installed.\nRun: pip install matplotlib",
-                          text_color=self._c("muted"), font=ctk.CTkFont(size=12),
-                          fg_color="transparent").grid(row=0, column=0)
+                        text_color=self._c("muted"), font=ctk.CTkFont(size=12),
+                        fg_color="transparent").grid(row=0, column=0)
             return
 
         hist_frame = ctk.CTkFrame(right, corner_radius=8,
-                                   fg_color=self._c("surface"),
-                                   border_width=1, border_color=self._c("border"))
+                                fg_color=self._c("surface"),
+                                border_width=1, border_color=self._c("border"))
         hist_frame.grid(row=0, column=0, sticky="nsew", pady=(0, 6))
 
         top_row = ctk.CTkFrame(hist_frame, fg_color="transparent")
         top_row.pack(fill="x", padx=14, pady=(10, 0))
         ctk.CTkLabel(top_row, text="COLOR HISTOGRAM", text_color=self._c("muted"),
-                      font=ctk.CTkFont(size=9), fg_color="transparent").pack(side="left")
+                    font=ctk.CTkFont(size=9), fg_color="transparent").pack(side="left")
         self._hist_frame_lbl = ctk.CTkLabel(top_row, text="", text_color=self._c("accent"),
-                                             font=ctk.CTkFont(size=10), fg_color="transparent")
+                                            font=ctk.CTkFont(size=10), fg_color="transparent")
         self._hist_frame_lbl.pack(side="left", padx=(8, 0))
+
+        # Tombol download histogram di kanan atas
+        ctk.CTkButton(top_row, text="Export Histogram PNG", width=70, height=24,
+                    fg_color=self._c("surface3"), text_color=self._c("muted"),
+                    hover_color=self._c("accent"), font=ctk.CTkFont(size=10),
+                    corner_radius=6, command=self._export_hist_png).pack(side="right")
 
         self._hist_fig = Figure(figsize=(6, 3.2), dpi=96, facecolor=self._c("surface"))
         self._hist_fig.subplots_adjust(left=0.06, right=0.98, top=0.88, bottom=0.12, wspace=0.3)
@@ -193,12 +199,20 @@ class CompareTab(ctk.CTkFrame):
         self._hist_canvas.get_tk_widget().pack(fill="both", expand=True, padx=6, pady=6)
 
         psnr_frame = ctk.CTkFrame(right, corner_radius=8,
-                                   fg_color=self._c("surface"),
-                                   border_width=1, border_color=self._c("border"))
+                                fg_color=self._c("surface"),
+                                border_width=1, border_color=self._c("border"))
         psnr_frame.grid(row=1, column=0, sticky="nsew")
-        ctk.CTkLabel(psnr_frame, text="PSNR PER FRAME", text_color=self._c("muted"),
-                      font=ctk.CTkFont(size=9), fg_color="transparent").pack(
-                          anchor="w", padx=14, pady=(10, 0))
+
+        psnr_top = ctk.CTkFrame(psnr_frame, fg_color="transparent")
+        psnr_top.pack(fill="x", padx=14, pady=(10, 0))
+        ctk.CTkLabel(psnr_top, text="PSNR PER FRAME", text_color=self._c("muted"),
+                    font=ctk.CTkFont(size=9), fg_color="transparent").pack(side="left")
+
+        # Tombol download PSNR chart di kanan atas
+        ctk.CTkButton(psnr_top, text= "Export Metrics CSV", width=70, height=24,
+                    fg_color=self._c("surface3"), text_color=self._c("muted"),
+                    hover_color=self._c("accent"), font=ctk.CTkFont(size=10),
+                    corner_radius=6, command=self._export_csv).pack(side="right")
 
         self._psnr_fig = Figure(figsize=(6, 1.6), dpi=96, facecolor=self._c("surface"))
         self._psnr_fig.subplots_adjust(left=0.06, right=0.98, top=0.85, bottom=0.18)
@@ -363,3 +377,16 @@ class CompareTab(ctk.CTkFrame):
                 for i, (p, m) in enumerate(zip(self._psnr_list, self._mse_list), 1):
                     f.write(f"{i},{p:.4f},{m:.6f}\n")
             messagebox.showinfo("Saved", f"Metrics CSV saved to:\n{path}")
+
+    def _export_psnr_png(self):
+        if not HAS_MPL:
+            messagebox.showwarning("Not available", "matplotlib is required.")
+            return
+        if not self._psnr_list:
+            messagebox.showwarning("No data", "Run analysis first.")
+            return
+        path = filedialog.asksaveasfilename(title="Save PSNR chart", defaultextension=".png",
+                                            filetypes=[("PNG image", "*.png")])
+        if path:
+            self._psnr_fig.savefig(path, facecolor=self._c("surface"), dpi=150, bbox_inches="tight")
+            messagebox.showinfo("Saved", f"PSNR chart saved to:\n{path}")
