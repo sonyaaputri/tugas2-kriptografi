@@ -222,8 +222,19 @@ def embed_to_video(
     fps = cap.get(cv2.CAP_PROP_FPS)
     width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-    fourcc = cv2.VideoWriter_fourcc(*"XVID")
+    
+    fourcc = cv2.VideoWriter_fourcc(*"FFV1")
     out = cv2.VideoWriter(output_path, fourcc, fps, (width, height))
+
+    if not out.isOpened():
+        fourcc = cv2.VideoWriter_fourcc(*"HFYU")
+        out = cv2.VideoWriter(output_path, fourcc, fps, (width, height))
+
+    if not out.isOpened():
+        cap.release()
+        raise ValueError(
+            "Gagal membuat AVI lossless. FFV1/HFYU tidak tersedia di sistem ini."
+        )
 
     bits_per_pixel = sum(scheme)
     bit_idx = 0

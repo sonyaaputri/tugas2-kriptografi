@@ -522,6 +522,7 @@ class EmbedTab(ctk.CTkFrame):
 
     # Event Handlers
     def _on_msg_type(self, val):
+        self._msg_type.set(val.lower())
         self._text_frame.pack_forget()
         self._file_frame.pack_forget()
         if val == "Text":
@@ -534,6 +535,7 @@ class EmbedTab(ctk.CTkFrame):
         self._enc_key_entry.configure(state=state)
 
     def _on_mode_change(self, val):
+        self._insert_mode.set(val.lower())
         state = "normal" if val == "Random" else "disabled"
         self._stego_entry.configure(state=state)
 
@@ -648,7 +650,7 @@ class EmbedTab(ctk.CTkFrame):
         if self._enc_switch.get() and not self._enc_key.get():
             messagebox.showwarning("Missing key", "Please enter the A5/1 encryption key.")
             return
-        if self._insert_mode.get() == "Random" and not self._stego_key.get():
+        if self._insert_mode.get() == "random" and not self._stego_key.get():
             messagebox.showwarning("Missing key", "Please enter the stego-key.")
             return
 
