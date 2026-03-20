@@ -2,6 +2,7 @@ import customtkinter as ctk
 from tkinter import filedialog, messagebox, StringVar, BooleanVar
 import threading
 import os
+import time
 import hashlib
 
 
@@ -12,9 +13,9 @@ class ExtractTab(ctk.CTkFrame):
         super().__init__(parent, corner_radius=0, fg_color=colors["bg"])
         self.C = colors
         self.status_var = status_var
-        self._stego_path  = StringVar()
-        self._dec_key     = StringVar()
-        self._stego_key   = StringVar()
+        self._stego_path      = StringVar()
+        self._dec_key         = StringVar()
+        self._stego_key       = StringVar()
         self._extracted_bytes = None
         self._extracted_meta  = {}
 
@@ -22,6 +23,7 @@ class ExtractTab(ctk.CTkFrame):
         self.grid_columnconfigure(1, weight=2)
         self.grid_columnconfigure(2, weight=2)
         self.grid_rowconfigure(0, weight=1)
+
         self._build_left()
         self._build_mid()
         self._build_right()
@@ -147,7 +149,7 @@ class ExtractTab(ctk.CTkFrame):
         self._section_label(wrap, "Metadata")
         self._meta_vars = {}
         for key, label in [("filename", "Filename"), ("size", "Size"),
-                            ("enc", "Encrypted"), ("mode", "Insertion mode")]:
+                            ("enc", "Encrypted"),    ("mode", "Insertion mode")]:
             self._field_label(wrap, label)
             var = StringVar(value="—")
             self._meta_vars[key] = var
@@ -159,10 +161,12 @@ class ExtractTab(ctk.CTkFrame):
     def _build_right(self):
         wrap = self._panel(self, col=2, padx=(6, 12))
 
+        # File Integrity
         self._section_label(wrap, "File Integrity")
+
         self._int_vars = {}
-        for key, label in [("orig_md5", "Original MD5"), ("ext_md5", "Extracted MD5"),
-                            ("orig_sha", "Original SHA256"), ("ext_sha", "Extracted SHA256")]:
+        for key, label in [("orig_md5", "Original MD5"),
+                            ("ext_md5",  "Extracted MD5")]:
             row = ctk.CTkFrame(wrap, fg_color="transparent")
             row.pack(fill="x", padx=4, pady=2)
             row.grid_columnconfigure(1, weight=1)
@@ -177,35 +181,47 @@ class ExtractTab(ctk.CTkFrame):
                           font=ctk.CTkFont(family="Courier New", size=9),
                           corner_radius=4, height=28).grid(row=0, column=1, sticky="ew")
 
+        # Label perbandingan MD5
         self._integrity_lbl = ctk.CTkLabel(wrap, text="",
                                             text_color=self._c("muted"),
                                             font=ctk.CTkFont(size=11, weight="bold"),
                                             fg_color="transparent", anchor="w")
         self._integrity_lbl.pack(fill="x", padx=4, pady=(8, 0))
 
+        # Quality Metrics
         self._section_label(wrap, "Quality Metrics")
+
         mg = ctk.CTkFrame(wrap, fg_color="transparent")
         mg.pack(fill="x", padx=4)
         mg.grid_columnconfigure((0, 1), weight=1)
 
-        self._psnr_var = StringVar(value="—")
-        self._mse_var  = StringVar(value="—")
-        self._frm_var  = StringVar(value="—")
+        self._psnr_var   = StringVar(value="—")
+        self._mse_var    = StringVar(value="—")
+        self._frm_var    = StringVar(value="—")
+        self._md5_status = StringVar(value="—")
 
-        for i, (lbl, var, color) in enumerate([
-            ("PSNR (dB)", self._psnr_var, self._c("green")),
-            ("MSE",       self._mse_var,  self._c("accent")),
-            ("Frames",    self._frm_var,  self._c("text")),
-        ]):
+        cards_def = [
+            ("PSNR (dB)", self._psnr_var,   self._c("green"),  0, 0),
+            ("MSE",       self._mse_var,    self._c("accent"), 0, 1),
+            ("Frames",    self._frm_var,    self._c("text"),   1, 0),
+            ("MD5",       self._md5_status, self._c("muted"),  1, 1),
+        ]
+
+        self._md5_value_label = None
+
+        for lbl, var, color, r, c in cards_def:
             card = ctk.CTkFrame(mg, fg_color=self._c("surface2"), corner_radius=8,
                                  border_width=1, border_color=self._c("border"))
-            card.grid(row=i//2, column=i%2, padx=3, pady=3, sticky="ew", ipadx=8, ipady=6)
+            card.grid(row=r, column=c, padx=3, pady=3, sticky="ew", ipadx=8, ipady=6)
             ctk.CTkLabel(card, text=lbl, text_color=self._c("muted"),
                           font=ctk.CTkFont(size=10), fg_color="transparent",
                           anchor="w").pack(anchor="w")
-            ctk.CTkLabel(card, textvariable=var, text_color=color,
-                          font=ctk.CTkFont(size=18, weight="bold"),
-                          fg_color="transparent", anchor="w").pack(anchor="w")
+            val_lbl = ctk.CTkLabel(card, textvariable=var, text_color=color,
+                                    font=ctk.CTkFont(size=18, weight="bold"),
+                                    fg_color="transparent", anchor="w")
+            val_lbl.pack(anchor="w")
+            if lbl == "MD5":
+                self._md5_value_label = val_lbl
 
         self._section_label(wrap, "Extract Log")
         self._log_box = ctk.CTkTextbox(wrap, height=180,
@@ -227,16 +243,17 @@ class ExtractTab(ctk.CTkFrame):
         self._stego_key_entry.configure(state=state)
 
     def _browse_stego(self):
-        path = filedialog.askopenfilename(title="Select stego-video",
-                                           filetypes=[("AVI files", "*.avi"), ("All files", "*.*")])
+        path = filedialog.askopenfilename(
+            title="Select stego-video",
+            filetypes=[("AVI files", "*.avi"), ("All files", "*.*")])
         if path:
             self._stego_path.set(path)
             size_mb = os.path.getsize(path) / 1_048_576
-            self._stego_info.configure(text=f"{os.path.basename(path)}  ({size_mb:.1f} MB)")
+            self._stego_info.configure(
+                text=f"{os.path.basename(path)}  ({size_mb:.1f} MB)")
             self._log(f"Loaded: {os.path.basename(path)}")
 
     def _log(self, msg):
-        import time
         self._log_box.configure(state="normal")
         ts = time.strftime("%H:%M:%S")
         self._log_box.insert("end", f"[{ts}] {msg}\n")
@@ -259,20 +276,25 @@ class ExtractTab(ctk.CTkFrame):
         self._progress.set(0)
 
         params = {
-            "stego": self._stego_path.get(),
-            "use_dec": bool(self._enc_switch.get()), "dec_key": self._dec_key.get(),
-            "use_rand": bool(self._rand_switch.get()), "stego_key": self._stego_key.get(),
+            "stego":     self._stego_path.get(),
+            "use_dec":   bool(self._enc_switch.get()),
+            "dec_key":   self._dec_key.get(),
+            "use_rand":  bool(self._rand_switch.get()),
+            "stego_key": self._stego_key.get(),
         }
         threading.Thread(target=self._extract_worker, args=(params,), daemon=True).start()
 
     def _extract_worker(self, params):
         try:
-            from core.video_handler import extract_message
+            from core.avi_handler import extract_message
             result = extract_message(
-                stego_path=params["stego"], use_dec=params["use_dec"],
-                dec_key=params["dec_key"], use_rand=params["use_rand"],
+                stego_path=params["stego"],
+                use_dec=params["use_dec"],
+                dec_key=params["dec_key"],
+                use_rand=params["use_rand"],
                 stego_key=params["stego_key"],
-                progress_cb=self._on_progress, log_cb=self._log,
+                progress_cb=self._on_progress,
+                log_cb=self._log,
             )
             self.after(0, self._on_extract_done, result)
         except Exception as e:
@@ -304,12 +326,15 @@ class ExtractTab(ctk.CTkFrame):
         self._msg_result.configure(state="normal")
         self._msg_result.delete("1.0", "end")
         if msg_type == "text":
-            self._msg_result.insert("1.0", self._extracted_bytes.decode("utf-8", errors="replace"))
+            self._msg_result.insert(
+                "1.0", self._extracted_bytes.decode("utf-8", errors="replace"))
             self._save_btn.configure(state="disabled")
         else:
-            self._msg_result.insert("1.0",
+            self._msg_result.insert(
+                "1.0",
                 f"[File: {meta.get('filename','unknown')}]\n"
-                f"Size: {len(self._extracted_bytes):,} bytes\n\nClick 'Save As' to save.")
+                f"Size: {len(self._extracted_bytes):,} bytes\n\n"
+                f"Click 'Save As' to save.")
             self._save_btn.configure(state="normal",
                                       fg_color=self._c("accent"),
                                       text_color="white")
@@ -321,23 +346,41 @@ class ExtractTab(ctk.CTkFrame):
 
         if self._extracted_bytes:
             ext_md5 = hashlib.md5(self._extracted_bytes).hexdigest()
-            ext_sha = hashlib.sha256(self._extracted_bytes).hexdigest()
             self._int_vars["ext_md5"].set(ext_md5[:24] + "…")
-            self._int_vars["ext_sha"].set(ext_sha[:24] + "…")
+
             orig_md5 = meta.get("orig_md5", "")
-            orig_sha = meta.get("orig_sha256", "")
+
             if orig_md5:
                 self._int_vars["orig_md5"].set(orig_md5[:24] + "…")
-                self._int_vars["orig_sha"].set(orig_sha[:24] + "…")
-                if orig_md5 == ext_md5 and orig_sha == ext_sha:
+                md5_match = (orig_md5 == ext_md5)
+
+                if md5_match:
                     self._integrity_lbl.configure(
-                        text="✔  MD5 & SHA256 match", text_color=self._c("green"))
+                        text="✔  MD5 match — file intact",
+                        text_color=self._c("green"))
+                    self._md5_status.set("✓")
+                    self._md5_value_label.configure(text_color=self._c("green"))
                 else:
                     self._integrity_lbl.configure(
-                        text="✘  Integrity mismatch", text_color=self._c("red"))
+                        text="✘  MD5 mismatch — file corrupted",
+                        text_color=self._c("red"))
+                    self._md5_status.set("✗")
+                    self._md5_value_label.configure(text_color=self._c("red"))
+
+                self._log(
+                    f"MD5 orig     : {orig_md5[:16]}…")
+                self._log(
+                    f"MD5 extracted: {ext_md5[:16]}…")
+                self._log(
+                    f"Integrity    : {'MATCH ✓' if md5_match else 'MISMATCH ✗'}")
             else:
-                self._integrity_lbl.configure(text="No original hash in metadata",
-                                               text_color=self._c("muted"))
+                self._integrity_lbl.configure(
+                    text="No original MD5 in metadata",
+                    text_color=self._c("muted"))
+                self._md5_status.set("—")
+                self._md5_value_label.configure(text_color=self._c("muted"))
+                self._log("Integrity: original MD5 tidak tersedia di metadata.")
+
         self._log("Extraction complete!")
 
     def _on_extract_error(self, msg):
@@ -353,7 +396,8 @@ class ExtractTab(ctk.CTkFrame):
         default_name = self._extracted_meta.get("filename", "extracted_file")
         ext  = os.path.splitext(default_name)[1] or ".*"
         path = filedialog.asksaveasfilename(
-            title="Save extracted file", initialfile=default_name,
+            title="Save extracted file",
+            initialfile=default_name,
             defaultextension=ext,
             filetypes=[(f"{ext} files", f"*{ext}"), ("All files", "*.*")])
         if path:
