@@ -556,6 +556,8 @@ class EmbedTab(ctk.CTkFrame):
         )
         if path:
             self._cover_path.set(path)
+            base = os.path.splitext(os.path.basename(path))[0]
+            ext  = os.path.splitext(path)[1].lower()
             if ext == ".mp4":
                 messagebox.showwarning(
                     "Warning",
@@ -565,8 +567,6 @@ class EmbedTab(ctk.CTkFrame):
             self._update_capacity()
             self._log(f"Video loaded: {os.path.basename(path)}")
 
-            base = os.path.splitext(os.path.basename(path))[0]
-            ext  = os.path.splitext(path)[1].lower()
             if ext not in [".avi", ".mp4"]:
                 ext = ".avi"
 
