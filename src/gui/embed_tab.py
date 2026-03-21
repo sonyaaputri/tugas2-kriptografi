@@ -140,6 +140,7 @@ class EmbedTab(ctk.CTkFrame):
             corner_radius=6, border_width=1,
         )
         self._msg_text.pack(fill="both", expand=True, padx=4)
+        self._msg_text.bind("<KeyRelease>", lambda _: self._update_capacity())
 
         # file frame
         self._file_frame = ctk.CTkFrame(self._msg_container, fg_color="transparent")
@@ -632,12 +633,31 @@ class EmbedTab(ctk.CTkFrame):
         try:
             from utils.capacity import compute_capacity
             cap_bytes, used_bytes = compute_capacity(cover, bpp)
-            cap_mb  = cap_bytes  / 1_048_576
+            cap_mb = cap_bytes / 1_048_576
+
+            # Hitung used hanya jika ada pesan/file dipilih
+            msg_type = self._msg_type.get()
+            if msg_type == "text":
+                raw = self._msg_text.get("1.0", "end").strip()
+                used_bytes = len(raw.encode("utf-8")) + 20 if raw else 0
+            else:
+                fp = self._file_path.get()
+                used_bytes = os.path.getsize(fp) + 20 if fp and os.path.exists(fp) else 0
+
             used_mb = used_bytes / 1_048_576
-            pct = min(1.0, used_bytes / cap_bytes) if cap_bytes else 0
-            self._cap_label.configure(
-                text=f"Capacity: {used_mb:.2f} / {cap_mb:.2f} MB  ({int(pct*100)}%)")
-            self._cap_bar.set(pct)
+            pct     = min(1.0, used_bytes / cap_bytes) if cap_bytes else 0
+
+            if used_bytes == 0:
+                self._cap_label.configure(
+                    text=f"Capacity: {cap_mb:.2f} MB available")
+                self._cap_bar.set(0)
+            else:
+                color = self._c("red") if pct >= 1.0 else self._c("accent")
+                self._cap_label.configure(
+                    text=f"Capacity: {used_mb:.2f} / {cap_mb:.2f} MB  ({int(pct*100)}%)")
+                self._cap_bar.configure(progress_color=color)
+                self._cap_bar.set(pct)
+
         except Exception:
             self._cap_label.configure(
                 text=f"Capacity: bits/px = {bpp} (load video for exact)")
