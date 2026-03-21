@@ -189,11 +189,11 @@ class ExtractTab(ctk.CTkFrame):
         self._integrity_lbl.pack(fill="x", padx=4, pady=(8, 0))
 
         # Quality Metrics
-        self._section_label(wrap, "Quality Metrics")
+        # self._section_label(wrap, "Quality Metrics")
 
-        mg = ctk.CTkFrame(wrap, fg_color="transparent")
-        mg.pack(fill="x", padx=4)
-        mg.grid_columnconfigure((0, 1), weight=1)
+        # mg = ctk.CTkFrame(wrap, fg_color="transparent")
+        # mg.pack(fill="x", padx=4)
+        # mg.grid_columnconfigure((0, 1), weight=1)
 
         self._psnr_var   = StringVar(value="—")
         self._mse_var    = StringVar(value="—")
@@ -207,21 +207,24 @@ class ExtractTab(ctk.CTkFrame):
             ("MD5",       self._md5_status, self._c("muted"),  1, 1),
         ]
 
-        self._md5_value_label = None
+        self._md5_value_label = ctk.CTkLabel(wrap, textvariable=self._md5_status,
+                                      fg_color="transparent",
+                                      text_color=self._c("muted"),
+                                      font=ctk.CTkFont(size=1))
 
-        for lbl, var, color, r, c in cards_def:
-            card = ctk.CTkFrame(mg, fg_color=self._c("surface2"), corner_radius=8,
-                                 border_width=1, border_color=self._c("border"))
-            card.grid(row=r, column=c, padx=3, pady=3, sticky="ew", ipadx=8, ipady=6)
-            ctk.CTkLabel(card, text=lbl, text_color=self._c("muted"),
-                          font=ctk.CTkFont(size=10), fg_color="transparent",
-                          anchor="w").pack(anchor="w")
-            val_lbl = ctk.CTkLabel(card, textvariable=var, text_color=color,
-                                    font=ctk.CTkFont(size=18, weight="bold"),
-                                    fg_color="transparent", anchor="w")
-            val_lbl.pack(anchor="w")
-            if lbl == "MD5":
-                self._md5_value_label = val_lbl
+        # for lbl, var, color, r, c in cards_def:
+        #     card = ctk.CTkFrame(mg, fg_color=self._c("surface2"), corner_radius=8,
+        #                          border_width=1, border_color=self._c("border"))
+        #     card.grid(row=r, column=c, padx=3, pady=3, sticky="ew", ipadx=8, ipady=6)
+        #     ctk.CTkLabel(card, text=lbl, text_color=self._c("muted"),
+        #                   font=ctk.CTkFont(size=10), fg_color="transparent",
+        #                   anchor="w").pack(anchor="w")
+        #     val_lbl = ctk.CTkLabel(card, textvariable=var, text_color=color,
+        #                             font=ctk.CTkFont(size=18, weight="bold"),
+        #                             fg_color="transparent", anchor="w")
+        #     val_lbl.pack(anchor="w")
+        #     if lbl == "MD5":
+        #         self._md5_value_label = val_lbl
 
         self._section_label(wrap, "Extract Log")
         self._log_box = ctk.CTkTextbox(wrap, height=180,
@@ -362,13 +365,13 @@ class ExtractTab(ctk.CTkFrame):
 
                 if md5_match:
                     self._integrity_lbl.configure(
-                        text="✔  MD5 match — file intact",
+                        text="✔  MD5 match - file intact",
                         text_color=self._c("green"))
                     self._md5_status.set("✓")
                     self._md5_value_label.configure(text_color=self._c("green"))
                 else:
                     self._integrity_lbl.configure(
-                        text="✘  MD5 mismatch — file corrupted",
+                        text="✘  MD5 mismatch - file corrupted",
                         text_color=self._c("red"))
                     self._md5_status.set("✗")
                     self._md5_value_label.configure(text_color=self._c("red"))

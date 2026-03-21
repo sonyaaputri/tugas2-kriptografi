@@ -63,7 +63,7 @@ class CompareTab(ctk.CTkFrame):
         ]:
             self._field_label(left, label)
             row = ctk.CTkFrame(left, fg_color="transparent")
-            row.pack(fill="x", padx=4, pady=(0, 8))
+            row.pack(fill="x", padx=4, pady=(0, 4))
             row.grid_columnconfigure(0, weight=1)
             ctk.CTkEntry(row, textvariable=var, state="readonly",
                           fg_color=self._c("surface2"), border_color=self._c("border"),
@@ -73,7 +73,17 @@ class CompareTab(ctk.CTkFrame):
                            fg_color=self._c("surface3"), text_color=self._c("text"),
                            hover_color=self._c("accent"), font=ctk.CTkFont(size=12),
                            corner_radius=6, command=cb).grid(row=0, column=1)
-
+            
+        # Analyze Button
+        self._analyze_btn = ctk.CTkButton(
+            left, text="Analyze Videos", height=30,
+            fg_color=self._c("accent"), hover_color=self._c("accent_hover"),
+            text_color="white", font=ctk.CTkFont(size=13, weight="bold"),
+            corner_radius=8, command=self._run_analysis,
+        )
+        self._analyze_btn.pack(fill="x", padx=4, pady=(15, 12))
+        
+        # Frame Navigator
         self._section_label(left, "Frame Navigator")
         self._frame_info = ctk.CTkLabel(left, text="Frame: 1 / —",
                                          text_color=self._c("text"),
@@ -104,6 +114,7 @@ class CompareTab(ctk.CTkFrame):
         #                corner_radius=6,
         #                command=lambda: self._step_frame(1)).grid(row=0, column=1, sticky="ew", padx=(3, 0))
 
+        # Frame Matrics
         self._section_label(left, "Frame Metrics")
         self._fm_psnr = StringVar(value="PSNR: —")
         self._fm_mse  = StringVar(value="MSE:  —")
@@ -113,6 +124,7 @@ class CompareTab(ctk.CTkFrame):
                           font=ctk.CTkFont(size=13, weight="bold"),
                           fg_color="transparent", anchor="w").pack(fill="x", padx=4, pady=2)
 
+        # Video Sumary
         self._section_label(left, "Video Summary")
         mg = ctk.CTkFrame(left, fg_color="transparent")
         mg.pack(fill="x", padx=4)
@@ -137,16 +149,7 @@ class CompareTab(ctk.CTkFrame):
                           font=ctk.CTkFont(size=15, weight="bold"),
                           fg_color="transparent", anchor="w").pack(anchor="w")
 
-        # spacer
         ctk.CTkFrame(left, fg_color="transparent", height=16).pack()
-
-        self._analyze_btn = ctk.CTkButton(
-            left, text="Analyze Videos", height=42,
-            fg_color=self._c("accent"), hover_color=self._c("accent_hover"),
-            text_color="white", font=ctk.CTkFont(size=13, weight="bold"),
-            corner_radius=8, command=self._run_analysis,
-        )
-        self._analyze_btn.pack(fill="x", padx=4, pady=(0, 6))
 
         # ctk.CTkButton(left, text="Export Histogram PNG", height=34,
         #                fg_color=self._c("surface3"), text_color=self._c("muted"),
