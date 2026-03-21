@@ -245,7 +245,13 @@ class ExtractTab(ctk.CTkFrame):
     def _browse_stego(self):
         path = filedialog.askopenfilename(
             title="Select stego-video",
-            filetypes=[("AVI files", "*.avi"), ("All files", "*.*")])
+            filetypes=[
+                ("Video files", "*.avi *.mp4"),
+                ("AVI files", "*.avi"),
+                ("MP4 files", "*.mp4"),
+                ("All files", "*.*"),
+            ],
+        )
         if path:
             self._stego_path.set(path)
             size_mb = os.path.getsize(path) / 1_048_576
@@ -286,7 +292,7 @@ class ExtractTab(ctk.CTkFrame):
 
     def _extract_worker(self, params):
         try:
-            from core.avi_handler import extract_message
+            from core.video_handler import extract_message
             result = extract_message(
                 stego_path=params["stego"],
                 use_dec=params["use_dec"],

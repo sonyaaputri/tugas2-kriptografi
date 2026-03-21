@@ -58,6 +58,37 @@ def embed_message(
         # Default: AVI (atau format lain yang bisa dibaca OpenCV)
         from .avi_handler import embed_message
         return embed_message(**common)
+    
+def extract_message(
+    stego_path: str,
+    use_dec: bool,
+    dec_key: str,
+    use_rand: bool,
+    stego_key: str,
+    progress_cb=None,
+    log_cb=None,
+) -> dict:
+    """
+    Pilih handler extract berdasarkan ekstensi stego_path.
+    """
+    ext = os.path.splitext(stego_path)[1].lower()
+
+    common = dict(
+        stego_path=stego_path,
+        use_dec=use_dec,
+        dec_key=dec_key,
+        use_rand=use_rand,
+        stego_key=stego_key,
+        progress_cb=progress_cb,
+        log_cb=log_cb,
+    )
+
+    if ext == ".mp4":
+        from .mp4_handler import extract_message_mp4
+        return extract_message_mp4(**common)
+    else:
+        from .avi_handler import extract_message
+        return extract_message(**common)
 
 # load_frames
 

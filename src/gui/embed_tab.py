@@ -547,14 +547,30 @@ class EmbedTab(ctk.CTkFrame):
     def _browse_cover(self):
         path = filedialog.askopenfilename(
             title="Select cover video",
-            filetypes=[("AVI files", "*.avi"), ("All files", "*.*")])
+            filetypes=[
+                ("Video files", "*.avi *.mp4"),
+                ("AVI files", "*.avi"),
+                ("MP4 files", "*.mp4"),
+                ("All files", "*.*"),
+            ],
+        )
         if path:
             self._cover_path.set(path)
+            if ext == ".mp4":
+                messagebox.showwarning(
+                    "Warning",
+                    "MP4 uses lossy compression. Hidden data may be corrupted after encoding.\n\n"
+                    "AVI is recommended for reliable extraction."
+                )
             self._update_capacity()
             self._log(f"Video loaded: {os.path.basename(path)}")
 
-            base     = os.path.splitext(os.path.basename(path))[0]
-            out_name = f"{base}_embedded.avi"
+            base = os.path.splitext(os.path.basename(path))[0]
+            ext  = os.path.splitext(path)[1].lower()
+            if ext not in [".avi", ".mp4"]:
+                ext = ".avi"
+
+            out_name = f"{base}_embedded{ext}"
             out_path = os.path.join(_get_downloads_dir(), out_name)
             self._output_path.set(out_path)
             self._out_info_label.configure(
@@ -578,7 +594,10 @@ class EmbedTab(ctk.CTkFrame):
         downloads = _get_downloads_dir()
         current   = self._output_path.get()
 
-        initial_file = os.path.basename(current) if current else "stego_video.avi"
+        cover_ext = os.path.splitext(self._cover_path.get())[1].lower()
+        default_ext = ".mp4" if cover_ext == ".mp4" else ".avi"
+
+        initial_file = os.path.basename(current) if current else f"stego_video{default_ext}"
         initial_dir  = os.path.dirname(current) if current and os.path.isdir(
             os.path.dirname(current)) else downloads
 
@@ -586,12 +605,17 @@ class EmbedTab(ctk.CTkFrame):
             title="Save stego-video as",
             initialdir=initial_dir,
             initialfile=initial_file,
-            defaultextension=".avi",
-            filetypes=[("AVI files", "*.avi"), ("MP4 files", "*.mp4"), ("All files", "*.*")],
+            defaultextension=default_ext,
+            filetypes=[
+                ("Video files", "*.avi *.mp4"),
+                ("AVI files", "*.avi"),
+                ("MP4 files", "*.mp4"),
+                ("All files", "*.*"),
+            ],
         )
         if path:
             self._output_path.set(path)
-            self._out_info_label.configure(text=f"📁 {path}")
+            self._out_info_label.configure(text=f"Output: {path}")
             self._log(f"Output → {path}")
 
     # Capacity

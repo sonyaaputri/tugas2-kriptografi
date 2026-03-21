@@ -1,15 +1,19 @@
 import os
 import cv2
-import numpy as np
+import math
+import random as _random
 
 from .a51 import a51
 from .lsb import (
-    embed_to_video,
     extract_from_video,
     calculate_capacity,
     rgb_bits,
     calculate_video_mse_psnr,
+    bytes_to_bits,
+    embed_bits_in_pixel,
 )
+from .metadata import encode_metadata
+
 
 # Embed
 
@@ -34,7 +38,7 @@ def embed_message_mp4(
 
     Returns
     -------
-    dict: psnr, mse, frames, output, cover_frame, stego_frame
+    dict: psnr, mse, frames, output
     """
 
     def _log(msg):
@@ -51,15 +55,15 @@ def embed_message_mp4(
     if not output_path.lower().endswith(".mp4"):
         output_path = os.path.splitext(output_path)[0] + ".mp4"
 
-    # Baca payload 
+    # Baca payload
     if msg_type == "text":
-        payload  = msg_data.encode("utf-8")
-        is_file  = False
+        payload = msg_data.encode("utf-8")
+        is_file = False
         filename = ""
     else:
         with open(msg_data, "rb") as f:
             payload = f.read()
-        is_file  = True
+        is_file = True
         filename = os.path.basename(msg_data)
 
     _log(f"[MP4] Payload  : {len(payload):,} bytes")
@@ -79,123 +83,159 @@ def embed_message_mp4(
     _log(f"[MP4] Capacity : {cap_bytes:,} bytes")
 
     _progress(10)
-
-    # Embed menggunakan lsb.embed_to_video dengan fourcc mp4v
     _log("[MP4] Embedding…")
 
-    # Buka cover untuk metadata video
+    # Metadata video
     cap = cv2.VideoCapture(cover_path)
     if not cap.isOpened():
         raise ValueError(f"Gagal membuka video: {cover_path}")
-    fps    = cap.get(cv2.CAP_PROP_FPS)
-    width  = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+
+    fps = cap.get(cv2.CAP_PROP_FPS)
+    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-    cap.release()
 
-    # Karena embed_to_video menggunakan XVID secara internal, buat wrapper yang menulis langsung mp4v.
-
-    from .metadata import encode_metadata, estimate_header_size
-    from .lsb import bytes_to_bits, bits_to_bytes, embed_bits_in_pixel
-    import random as _random
+    fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+    out_w = cv2.VideoWriter(output_path, fourcc, fps, (width, height))
+    if not out_w.isOpened():
+        cap.release()
+        raise ValueError("Gagal membuat output MP4 (codec mp4v tidak tersedia).")
 
     if use_enc and a51_key:
         payload_to_embed = a51.encrypt_payload(a51_key, payload)
     else:
         payload_to_embed = payload
 
-    msg_type_str  = "file" if is_file else "text"
+    msg_type_str = "file" if is_file else "text"
     insert_mode_s = "random" if insert_mode == "random" else "sequential"
+
     ext = ""
     if is_file and filename:
         dot = filename.rfind(".")
         ext = filename[dot:] if dot != -1 else ""
 
     header = encode_metadata(
-        msg_type    = msg_type_str,
-        payload_size= len(payload_to_embed),
-        encrypted   = use_enc,
-        insert_mode = insert_mode_s,
-        r_bits      = scheme[0],
-        g_bits      = scheme[1],
-        b_bits      = scheme[2],
-        orig_data   = payload,
-        filename    = filename if is_file else "",
-        ext         = ext,
+        msg_type=msg_type_str,
+        payload_size=len(payload_to_embed),
+        encrypted=use_enc,
+        insert_mode=insert_mode_s,
+        r_bits=scheme[0],
+        g_bits=scheme[1],
+        b_bits=scheme[2],
+        orig_data=payload,
+        filename=filename if is_file else "",
+        ext=ext,
     )
-    full_data = header + payload_to_embed
 
+    full_data = header + payload_to_embed
     if len(full_data) > cap_bytes:
+        cap.release()
+        out_w.release()
         raise ValueError(
             f"Data ({len(full_data)} bytes) melebihi kapasitas video ({cap_bytes} bytes)."
         )
 
-    bit_stream   = bytes_to_bits(full_data)
-    total_bits   = len(bit_stream)
     bits_per_pix = sum(scheme)
+    header_bits = bytes_to_bits(header)
+    payload_bits = bytes_to_bits(payload_to_embed)
 
-    cap_in  = cv2.VideoCapture(cover_path)
-    fourcc  = cv2.VideoWriter_fourcc(*"mp4v")
-    out_w   = cv2.VideoWriter(output_path, fourcc, fps, (width, height))
+    header_idx = 0
+    payload_idx = 0
+    done_header = False
+    done_payload = False
 
-    bit_idx = 0
-    done    = False
+    first_frame = True
+    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT)) or 1
+    frame_no = 0
 
     while True:
-        ret, frame = cap_in.read()
+        ret, frame = cap.read()
         if not ret:
             break
 
-        if not done:
-            h, w     = frame.shape[:2]
-            total_px = h * w
+        frame_no += 1
+        h, w = frame.shape[:2]
+        total_px = h * w
+        frame_flat = frame.reshape(-1, 3)
 
-            if insert_mode == "random" and stego_key:
-                px_idx = list(range(total_px))
-                rng    = _random.Random(stego_key)
-                rng.shuffle(px_idx)
-            else:
-                px_idx = list(range(total_px))
-
-            frame_flat = frame.reshape(-1, 3)
-
-            for pi in px_idx:
-                if bit_idx >= total_bits:
-                    done = True
+        # 1) Header selalu sequential
+        start_payload_idx = 0
+        if not done_header:
+            for pi in range(total_px):
+                if header_idx >= len(header_bits):
+                    done_header = True
+                    start_payload_idx = pi
                     break
-                chunk = bit_stream[bit_idx: bit_idx + bits_per_pix]
+
+                chunk = header_bits[header_idx: header_idx + bits_per_pix]
                 while len(chunk) < bits_per_pix:
                     chunk.append(0)
+
                 r_new, g_new, b_new = embed_bits_in_pixel(
                     (frame_flat[pi][2], frame_flat[pi][1], frame_flat[pi][0]),
-                    chunk, scheme)
+                    chunk,
+                    scheme,
+                )
                 frame_flat[pi] = [b_new, g_new, r_new]
-                bit_idx += bits_per_pix
+                header_idx += bits_per_pix
 
-            frame = frame_flat.reshape(h, w, 3)
+            if not done_header:
+                # frame habis dipakai untuk header, belum boleh masuk payload
+                out_w.write(frame_flat.reshape(h, w, 3))
+                _progress(min(90, 10 + int(frame_no / total_frames * 80)))
+                continue
 
-        out_w.write(frame)
+        # 2) Payload mengikuti mode yang dipilih
+        if not done_payload:
+            if first_frame:
+                available_indices = list(range(start_payload_idx, total_px))
+                first_frame = False
+            else:
+                available_indices = list(range(total_px))
 
-    cap_in.release()
+            if insert_mode_s == "random" and stego_key:
+                rng = _random.Random(stego_key)
+                rng.shuffle(available_indices)
+
+            for pi in available_indices:
+                if payload_idx >= len(payload_bits):
+                    done_payload = True
+                    break
+
+                chunk = payload_bits[payload_idx: payload_idx + bits_per_pix]
+                while len(chunk) < bits_per_pix:
+                    chunk.append(0)
+
+                r_new, g_new, b_new = embed_bits_in_pixel(
+                    (frame_flat[pi][2], frame_flat[pi][1], frame_flat[pi][0]),
+                    chunk,
+                    scheme,
+                )
+                frame_flat[pi] = [b_new, g_new, r_new]
+                payload_idx += bits_per_pix
+
+        out_w.write(frame_flat.reshape(h, w, 3))
+        _progress(min(90, 10 + int(frame_no / total_frames * 80)))
+
+    cap.release()
     out_w.release()
 
-    _progress(85)
+    _progress(95)
+    _log("[MP4] Embedding selesai")
 
-    mse_list, psnr_list, mse_avg, psnr_avg = calculate_video_mse_psnr(cover_path, output_path)
-
-    cover_frame = _read_first_frame_rgb(cover_path)
-    stego_frame = _read_first_frame_rgb(output_path)
+    try:
+        mse_avg, psnr_avg, n_frames = calculate_video_mse_psnr(cover_path, output_path)
+    except Exception:
+        mse_avg, psnr_avg, n_frames = 0.0, float("inf"), 0
 
     _progress(100)
-    _log(f"[MP4] Done! PSNR={psnr_avg:.2f} dB  MSE={mse_avg:.4f}")
 
     return {
-        "psnr":        psnr_avg,
-        "mse":         mse_avg,
-        "frames":      len(mse_list),
-        "output":      output_path,
-        "cover_frame": cover_frame,
-        "stego_frame": stego_frame,
+        "psnr": psnr_avg,
+        "mse": mse_avg,
+        "frames": n_frames,
+        "output": output_path,
     }
+
 
 # Extract
 
@@ -234,15 +274,15 @@ def extract_message_mp4(
     _log("[MP4] Extracting bits…")
 
     result = extract_from_video(
-        stego_path = stego_path,
-        a51_key    = a51_key,
-        stego_key  = stego_key if use_rand else "",
+        stego_path=stego_path,
+        a51_key=a51_key,
+        stego_key=stego_key if use_rand else "",
     )
 
     _progress(90)
 
-    payload  = result["payload"]
-    is_file  = result["is_file"]
+    payload = result["payload"]
+    is_file = result["is_file"]
     filename = result["filename"]
     r = result.get("r_bits", 3)
     g = result.get("g_bits", 3)
@@ -253,23 +293,26 @@ def extract_message_mp4(
     _progress(100)
 
     meta = {
-        "msg_type":    "file" if is_file else "text",
-        "filename":    filename,
-        "size":        len(payload),
-        "encrypted":   result["encrypted"],
+        "msg_type": "file" if is_file else "text",
+        "filename": filename,
+        "size": len(payload),
+        "encrypted": result["encrypted"],
         "insert_mode": "random" if result["random_mode"] else "sequential",
-        "orig_md5":    result.get("orig_md5", ""),
+        "orig_md5": result.get("orig_md5", ""),
         "orig_sha256": result.get("orig_sha256", ""),
-        "r_bits": r, "g_bits": g, "b_bits": b,
+        "r_bits": r,
+        "g_bits": g,
+        "b_bits": b,
     }
 
     return {
-        "data":   payload,
-        "meta":   meta,
-        "psnr":   0.0,
-        "mse":    0.0,
+        "data": payload,
+        "meta": meta,
+        "psnr": 0.0,
+        "mse": 0.0,
         "frames": 0,
     }
+
 
 # Helpers
 

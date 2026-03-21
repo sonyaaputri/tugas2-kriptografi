@@ -234,14 +234,22 @@ class CompareTab(ctk.CTkFrame):
 
     def _browse_cover(self):
         path = filedialog.askopenfilename(title="Select cover video",
-                                           filetypes=[("AVI files", "*.avi"), ("All files", "*.*")])
+                                         filetypes=[("Video files", "*.avi *.mp4"),
+                                                    ("AVI files", "*.avi"),
+                                                    ("MP4 files", "*.mp4"),
+                                                    ("All files", "*.*"),
+                                                ])
         if path:
             self._cover_path.set(path)
             self._cover_frames = None
 
     def _browse_stego(self):
         path = filedialog.askopenfilename(title="Select stego-video",
-                                           filetypes=[("AVI files", "*.avi"), ("All files", "*.*")])
+                                         filetypes=[("Video files", "*.avi *.mp4"),
+                                                    ("AVI files", "*.avi"),
+                                                    ("MP4 files", "*.mp4"),
+                                                    ("All files", "*.*"),
+                                                ])
         if path:
             self._stego_path.set(path)
             self._stego_frames = None
