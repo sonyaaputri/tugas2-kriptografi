@@ -1,6 +1,7 @@
 import math
 import os
 import random
+import hashlib
 from typing import Iterable
 
 import cv2
@@ -48,6 +49,23 @@ def bits_to_bytes(bits: Iterable[int]):
             byte = (byte << 1) | int(b)
         result.append(byte)
     return bytes(result)
+
+
+def _calculate_total_pixels(video_path: str) -> int:
+    cap = cv2.VideoCapture(video_path)
+    if not cap.isOpened():
+        raise ValueError(f"Gagal membuka video: {video_path}")
+
+    total_pixels = 0
+    while True:
+        ret, frame = cap.read()
+        if not ret:
+            break
+        h, w = frame.shape[:2]
+        total_pixels += h * w
+
+    cap.release()
+    return total_pixels
 
 def _embed_bits_into_frames(
     cap: cv2.VideoCapture,
@@ -158,19 +176,7 @@ def calculate_capacity(video_path: str, scheme: tuple[int, int, int] = def_rgb):
     # ketentuan tambahan menolak penyisipan jika ukuran pesan rahasia melebihi batas kapasitas sisip
     scheme = rgb_bits(scheme)
 
-    cap = cv2.VideoCapture(video_path)
-    if not cap.isOpened():
-        raise ValueError(f"Gagal membuka video: {video_path}")
-
-    total_pixels = 0
-    while True:
-        ret, frame = cap.read()
-        if not ret:
-            break
-        h, w = frame.shape[:2]
-        total_pixels += h * w
-
-    cap.release()
+    total_pixels = _calculate_total_pixels(video_path)
 
     bits_per_pixel = sum(scheme)
     return (total_pixels * bits_per_pixel) // 8
@@ -235,6 +241,7 @@ def embed_to_video(
     scheme: tuple[int, int, int] = def_rgb,
     ):
     scheme = rgb_bits(scheme)
+    header_scheme = def_rgb
 
     if encrypt and a51_key:
         payload_to_embed = a51.encrypt_payload(a51_key, payload)
@@ -263,7 +270,14 @@ def embed_to_video(
 
     full_data = header + payload_to_embed
 
-    if not validate_capacity(cover_path, full_data, scheme):
+    total_pixels_available = _calculate_total_pixels(cover_path)
+    header_bits_per_pixel = sum(header_scheme)
+    payload_bits_per_pixel = sum(scheme)
+    required_pixels = math.ceil((len(header) * 8) / header_bits_per_pixel) + math.ceil(
+        (len(payload_to_embed) * 8) / payload_bits_per_pixel
+    )
+
+    if required_pixels > total_pixels_available:
         cap = calculate_capacity(cover_path, scheme)
         raise ValueError(
             f"Data ({len(full_data)} bytes) melebihi kapasitas video ({cap} bytes)."
@@ -277,11 +291,11 @@ def embed_to_video(
     width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
 
-    fourcc = cv2.VideoWriter_fourcc(*"FFV1")
+    fourcc = cv2.VideoWriter_fourcc(*"HFYU")
     out = cv2.VideoWriter(output_path, fourcc, fps, (width, height))
 
     if not out.isOpened():
-        fourcc = cv2.VideoWriter_fourcc(*"HFYU")
+        fourcc = cv2.VideoWriter_fourcc(*"FFV1")
         out = cv2.VideoWriter(output_path, fourcc, fps, (width, height))
 
     if not out.isOpened():
@@ -296,7 +310,7 @@ def embed_to_video(
         cap=cap,
         out=out,
         bit_stream=header_bits,
-        scheme=scheme,
+        scheme=header_scheme,
         random_mode=False,
         stego_key="",
     )
@@ -314,11 +328,11 @@ def embed_to_video(
     height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
 
     temp_path = output_path + ".tmp.avi"
-    fourcc = cv2.VideoWriter_fourcc(*"FFV1")
+    fourcc = cv2.VideoWriter_fourcc(*"HFYU")
     out = cv2.VideoWriter(temp_path, fourcc, fps, (width, height))
 
     if not out.isOpened():
-        fourcc = cv2.VideoWriter_fourcc(*"HFYU")
+        fourcc = cv2.VideoWriter_fourcc(*"FFV1")
         out = cv2.VideoWriter(temp_path, fourcc, fps, (width, height))
 
     if not out.isOpened():
@@ -328,8 +342,8 @@ def embed_to_video(
         )
 
     header_bits_len = len(header_bits)
-    bits_per_pixel = sum(scheme)
-    pixels_used_by_header = math.ceil(header_bits_len / bits_per_pixel)
+    payload_bits_per_pixel = sum(scheme)
+    pixels_used_by_header = math.ceil(header_bits_len / header_bits_per_pixel)
 
     payload_bits = bytes_to_bits(payload_to_embed)
 
@@ -362,8 +376,8 @@ def embed_to_video(
                     done = True
                     break
 
-                chunk = payload_bits[payload_idx: payload_idx + bits_per_pixel]
-                while len(chunk) < bits_per_pixel:
+                chunk = payload_bits[payload_idx: payload_idx + payload_bits_per_pixel]
+                while len(chunk) < payload_bits_per_pixel:
                     chunk.append(0)
 
                 r_new, g_new, b_new = embed_bits_in_pixel(
@@ -376,11 +390,20 @@ def embed_to_video(
                     scheme,
                 )
                 frame_flat[pix_idx] = [b_new, g_new, r_new]
-                payload_idx += bits_per_pixel
+                payload_idx += payload_bits_per_pixel
 
             frame = frame_flat.reshape(h, w, 3)
 
         out.write(frame)
+
+    if payload_idx < len(payload_bits):
+        cap.release()
+        out.release()
+        if os.path.exists(temp_path):
+            os.remove(temp_path)
+        raise ValueError(
+            "Payload tidak tertanam seluruhnya. Kapasitas efektif video tidak mencukupi untuk skema saat ini."
+        )
 
     cap.release()
     out.release()
@@ -444,6 +467,7 @@ def extract_from_video(
     ):
 
     scheme = rgb_bits(scheme)
+    header_scheme = def_rgb
 
     cap = cv2.VideoCapture(stego_path)
     if not cap.isOpened():
@@ -452,21 +476,46 @@ def extract_from_video(
     max_header_bytes = estimate_header_size() + 1024
     bits_needed_header = max_header_bytes * 8
 
-    header_bits = _extract_bits_random(
-        cap=cap,
-        bits_needed=bits_needed_header,
-        scheme=scheme,
-        random_mode=False,
-        stego_key="",
-        skip_pixels_first_frame=0,
-    )
-    header_bytes = bits_to_bytes(header_bits[:bits_needed_header])
-    meta, header_size = decode_metadata(header_bytes)
+    def _try_decode_header(with_scheme: tuple[int, int, int]):
+        cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+        header_bits_local = _extract_bits_random(
+            cap=cap,
+            bits_needed=bits_needed_header,
+            scheme=with_scheme,
+            random_mode=False,
+            stego_key="",
+            skip_pixels_first_frame=0,
+        )
+        header_bytes_local = bits_to_bytes(header_bits_local[:bits_needed_header])
+        meta_local, header_size_local = decode_metadata(header_bytes_local)
+        return meta_local, header_size_local, with_scheme
+
+    meta, header_size, header_read_scheme = _try_decode_header(header_scheme)
 
     payload_len = meta["size"]
     random_mode = meta["insert_mode"] == "random"
 
-    bits_per_pixel = sum(scheme)
+    if meta.get("encrypted") and not a51_key:
+        cap.release()
+        raise ValueError(
+            "Payload terenkripsi A5/1, tetapi key dekripsi belum diberikan."
+        )
+
+    if random_mode and not stego_key:
+        cap.release()
+        raise ValueError(
+            "Payload menggunakan mode random, tetapi stego-key belum diberikan."
+        )
+
+    payload_scheme = rgb_bits(
+        (
+            meta.get("r_bits", scheme[0]),
+            meta.get("g_bits", scheme[1]),
+            meta.get("b_bits", scheme[2]),
+        )
+    )
+
+    bits_per_pixel = sum(header_read_scheme)
     header_bits_len = header_size * 8
     pixels_used_by_header = math.ceil(header_bits_len / bits_per_pixel)
     payload_bits_needed = payload_len * 8
@@ -475,7 +524,7 @@ def extract_from_video(
     payload_bits = _extract_bits_random(
         cap=cap,
         bits_needed=payload_bits_needed,
-        scheme=scheme,
+        scheme=payload_scheme,
         random_mode=random_mode,
         stego_key=stego_key,
         skip_pixels_first_frame=pixels_used_by_header,
@@ -489,6 +538,24 @@ def extract_from_video(
     else:
         payload_final = payload_raw
 
+    # Validasi integritas untuk mencegah file korup (mis. key salah / bit rusak).
+    orig_md5 = meta.get("orig_md5", "")
+    orig_sha256 = meta.get("orig_sha256", "")
+    if orig_md5:
+        curr_md5 = hashlib.md5(payload_final).hexdigest()
+        if curr_md5 != orig_md5:
+            raise ValueError(
+                "Integritas payload gagal (MD5 mismatch). Kemungkinan kunci A5/1 atau stego-key salah, "
+                "atau data stego rusak."
+            )
+    if orig_sha256:
+        curr_sha256 = hashlib.sha256(payload_final).hexdigest()
+        if curr_sha256 != orig_sha256:
+            raise ValueError(
+                "Integritas payload gagal (SHA-256 mismatch). Kemungkinan kunci A5/1 atau stego-key salah, "
+                "atau data stego rusak."
+            )
+
     return {
         "payload": payload_final,
         "is_file": meta["msg_type"] == "file",
@@ -496,9 +563,9 @@ def extract_from_video(
         "encrypted": meta["encrypted"],
         "random_mode": random_mode,
         "payload_len": payload_len,
-        "orig_md5": meta.get("orig_md5", ""),
-        "orig_sha256": meta.get("orig_sha256", ""),
-        "r_bits": meta.get("r_bits", scheme[0]),
-        "g_bits": meta.get("g_bits", scheme[1]),
-        "b_bits": meta.get("b_bits", scheme[2]),
+        "orig_md5": orig_md5,
+        "orig_sha256": orig_sha256,
+        "r_bits": payload_scheme[0],
+        "g_bits": payload_scheme[1],
+        "b_bits": payload_scheme[2],
     }
