@@ -241,7 +241,7 @@ def embed_to_video(
     scheme: tuple[int, int, int] = def_rgb,
     ):
     scheme = rgb_bits(scheme)
-    header_scheme = def_rgb
+    header_scheme = scheme
 
     if encrypt and a51_key:
         payload_to_embed = a51.encrypt_payload(a51_key, payload)
@@ -304,7 +304,6 @@ def embed_to_video(
             "Gagal membuat AVI lossless. FFV1/HFYU tidak tersedia di sistem ini."
         )
 
-    # Header selalu sequential agar extractor bisa bootstrap metadata
     header_bits = bytes_to_bits(header)
     _embed_bits_into_frames(
         cap=cap,
@@ -315,7 +314,6 @@ def embed_to_video(
         stego_key="",
     )
 
-    # Payload mengikuti mode yang dipilih
     cap.release()
     out.release()
 
@@ -467,7 +465,6 @@ def extract_from_video(
     ):
 
     scheme = rgb_bits(scheme)
-    header_scheme = def_rgb
 
     cap = cv2.VideoCapture(stego_path)
     if not cap.isOpened():
@@ -490,7 +487,33 @@ def extract_from_video(
         meta_local, header_size_local = decode_metadata(header_bytes_local)
         return meta_local, header_size_local, with_scheme
 
-    meta, header_size, header_read_scheme = _try_decode_header(header_scheme)
+    # Coba extract header dengan user input
+    meta = None
+    header_size = None
+    header_read_scheme = None
+    try:
+        meta, header_size, header_read_scheme = _try_decode_header(scheme)
+    except Exception as e:
+        # coba semua kombinasi scheme jika user input salah
+        found = False
+        for r in range(1, 5):
+            for g in range(1, 5):
+                for b in range(1, 5):
+                    candidate = (r, g, b)
+                    try:
+                        meta, header_size, header_read_scheme = _try_decode_header(candidate)
+                        found = True
+                        break
+                    except Exception:
+                        continue
+                if found:
+                    break
+            if found:
+                break
+
+        if not found:
+            cap.release()
+            raise ValueError("Gagal membaca header stego-video. Skema yang diinput mungkin salah.")
 
     payload_len = meta["size"]
     random_mode = meta["insert_mode"] == "random"

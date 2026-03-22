@@ -1,5 +1,5 @@
 import customtkinter as ctk
-from tkinter import filedialog, messagebox, StringVar, BooleanVar
+from tkinter import filedialog, messagebox, StringVar, BooleanVar, IntVar
 import threading
 import os
 import time
@@ -16,6 +16,10 @@ class ExtractTab(ctk.CTkFrame):
         self._stego_path      = StringVar()
         self._dec_key         = StringVar()
         self._stego_key       = StringVar()
+        self._know_scheme     = BooleanVar(value=False)
+        self._r_bits          = IntVar(value=3)
+        self._g_bits          = IntVar(value=3)
+        self._b_bits          = IntVar(value=2)
         self._extracted_bytes = None
         self._extracted_meta  = {}
 
@@ -77,6 +81,50 @@ class ExtractTab(ctk.CTkFrame):
                                          font=ctk.CTkFont(size=10), fg_color="transparent",
                                          anchor="w")
         self._stego_info.pack(fill="x", padx=4, pady=(4, 0))
+
+        # LSB Bit Allocation (optional)
+        self._section_label(wrap, "LSB Scheme")
+        self._know_scheme_switch = ctk.CTkSwitch(wrap, text="I know the LSB scheme",
+                                                  command=self._on_scheme_toggle,
+                                                  progress_color=self._c("accent"),
+                                                  button_color=self._c("accent"),
+                                                  button_hover_color=self._c("accent2"),
+                                                  text_color=self._c("text"),
+                                                  font=ctk.CTkFont(size=12))
+        self._know_scheme_switch.pack(anchor="w", padx=4, pady=(0, 8))
+
+        self._scheme_frame = ctk.CTkFrame(wrap, fg_color="transparent")
+        self._scheme_frame.pack(fill="x", padx=4, pady=(0, 8))
+        self._scheme_frame.grid_columnconfigure((0, 1, 2), weight=1)
+
+        ch_colors = {"R": self._c("red"), "G": self._c("green"), "B": self._c("blue")}
+        lsb_vars = {"R": self._r_bits, "G": self._g_bits, "B": self._b_bits}
+
+        for col, ch in enumerate(("R", "G", "B")):
+            cell = ctk.CTkFrame(self._scheme_frame, fg_color=self._c("surface2"),
+                                 corner_radius=8, border_width=1,
+                                 border_color=self._c("border"))
+            cell.grid(row=0, column=col, padx=3, pady=2, sticky="ew", ipady=4)
+            ctk.CTkLabel(cell, text=ch, text_color=ch_colors[ch],
+                          font=ctk.CTkFont(size=11), fg_color="transparent").pack(pady=(6, 0))
+            ctk.CTkLabel(cell, textvariable=lsb_vars[ch],
+                          text_color=ch_colors[ch],
+                          font=ctk.CTkFont(size=20, weight="bold"),
+                          fg_color="transparent").pack()
+            ctk.CTkSlider(cell, from_=1, to=4, number_of_steps=3,
+                           variable=lsb_vars[ch],
+                           progress_color=ch_colors[ch],
+                           button_color=ch_colors[ch],
+                           button_hover_color=ch_colors[ch],
+                           fg_color=self._c("surface3"),
+                           state="disabled").pack(
+                               fill="x", padx=8, pady=(2, 8))
+
+        self._scheme_info = ctk.CTkLabel(wrap, text="Auto-detecting LSB scheme…",
+                                          text_color=self._c("muted"),
+                                          font=ctk.CTkFont(size=10),
+                                          fg_color="transparent", anchor="w")
+        self._scheme_info.pack(fill="x", padx=4, pady=(4, 0))
 
         self._section_label(wrap, "Decryption")
         self._enc_switch = ctk.CTkSwitch(wrap, text="Message was encrypted (A5/1)",
@@ -245,6 +293,15 @@ class ExtractTab(ctk.CTkFrame):
         state = "normal" if self._rand_switch.get() else "disabled"
         self._stego_key_entry.configure(state=state)
 
+    def _on_scheme_toggle(self):
+        """Enable/disable LSB scheme sliders based on toggle state."""
+        is_checked = self._know_scheme_switch.get()
+        # Find and update all sliders in scheme frame
+        for widget in self._scheme_frame.winfo_children():
+            for child in widget.winfo_children():
+                if isinstance(child, ctk.CTkSlider):
+                    child.configure(state="normal" if is_checked else "disabled")
+
     def _browse_stego(self):
         path = filedialog.askopenfilename(
             title="Select stego-video",
@@ -285,11 +342,15 @@ class ExtractTab(ctk.CTkFrame):
         self._progress.set(0)
 
         params = {
-            "stego":     self._stego_path.get(),
-            "use_dec":   bool(self._enc_switch.get()),
-            "dec_key":   self._dec_key.get(),
-            "use_rand":  bool(self._rand_switch.get()),
-            "stego_key": self._stego_key.get(),
+            "stego":        self._stego_path.get(),
+            "use_dec":      bool(self._enc_switch.get()),
+            "dec_key":      self._dec_key.get(),
+            "use_rand":     bool(self._rand_switch.get()),
+            "stego_key":    self._stego_key.get(),
+            "know_scheme":  bool(self._know_scheme_switch.get()),
+            "r_bits":       self._r_bits.get() if self._know_scheme_switch.get() else 3,
+            "g_bits":       self._g_bits.get() if self._know_scheme_switch.get() else 3,
+            "b_bits":       self._b_bits.get() if self._know_scheme_switch.get() else 2,
         }
         threading.Thread(target=self._extract_worker, args=(params,), daemon=True).start()
 
@@ -397,7 +458,10 @@ class ExtractTab(ctk.CTkFrame):
         self.status_var.set("Error")
         self._progress.set(0)
         self._log(f"Error: {msg}")
-        messagebox.showerror("Extract failed", msg)
+        try:
+            messagebox.showerror("Extract failed", msg, parent=self.winfo_toplevel())
+        except Exception:
+            self._log("Extract failed")
 
     def _save_file(self):
         if not self._extracted_bytes:
@@ -413,4 +477,7 @@ class ExtractTab(ctk.CTkFrame):
             with open(path, "wb") as f:
                 f.write(self._extracted_bytes)
             self._log(f"File saved: {os.path.basename(path)}")
-            messagebox.showinfo("Saved", f"File saved to:\n{path}")
+            try:
+                messagebox.showinfo("Saved", f"File saved to:\n{path}", parent=self.winfo_toplevel())
+            except Exception:
+                self._log("File saved")

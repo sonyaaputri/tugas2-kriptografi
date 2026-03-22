@@ -119,6 +119,9 @@ def extract_message(
     dec_key: str,
     use_rand: bool,
     stego_key: str,
+    r_bits: int = 3,
+    g_bits: int = 3,
+    b_bits: int = 2,
     progress_cb=None,
     log_cb=None,
 ) -> dict:
@@ -151,10 +154,12 @@ def extract_message(
 
     # Ekstraksi
     _log("Extracting bits…")
+    scheme = rgb_bits((r_bits, g_bits, b_bits))
     result = extract_from_video(
         stego_path = stego_path,
         a51_key    = a51_key,
         stego_key  = stego_key if use_rand else "",
+        scheme     = scheme,
     )
 
     _progress(85)
