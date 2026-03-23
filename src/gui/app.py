@@ -85,6 +85,25 @@ class App(ctk.CTk):
             btn.grid(row=i+2, column=0, columnspan=2, padx=8, pady=2, sticky="ew")
             self._nav_btns[key] = btn
 
+        # Divider
+        ctk.CTkFrame(sb, height=1, fg_color=C["border"],
+                     corner_radius=0).grid(row=5, column=0, columnspan=2,
+                                            padx=16, pady=(8, 4), sticky="ew")
+
+        # Reset button
+        self._reset_btn = ctk.CTkButton(
+            sb, text="↺  Reset",
+            anchor="w",
+            font=ctk.CTkFont(size=13),
+            fg_color="transparent",
+            text_color=C["red"],
+            hover_color=C["surface2"],
+            corner_radius=6,
+            height=38,
+            command=self._reset_active_tab,
+        )
+        self._reset_btn.grid(row=6, column=0, columnspan=2, padx=8, pady=2, sticky="ew")
+
         # Bottom badge
         ctk.CTkLabel(sb, text="v1.0.0", text_color=C["muted"],
                      font=ctk.CTkFont(size=10),
@@ -96,8 +115,10 @@ class App(ctk.CTk):
                      corner_radius=4).grid(row=12, column=0, columnspan=2,
                                             padx=16, pady=(0, 16), sticky="w")
 
-        # # Activate default
-        # self._switch_tab("embed")
+    def _reset_active_tab(self):
+        active_frame = self._tab_frames.get(self._active)
+        if active_frame and hasattr(active_frame, "_reset"):
+            active_frame._reset()
 
     def _switch_tab(self, key):
         for k, btn in self._nav_btns.items():

@@ -73,17 +73,15 @@ class CompareTab(ctk.CTkFrame):
                            fg_color=self._c("surface3"), text_color=self._c("text"),
                            hover_color=self._c("accent"), font=ctk.CTkFont(size=12),
                            corner_radius=6, command=cb).grid(row=0, column=1)
-            
-        # Analyze Button
+
         self._analyze_btn = ctk.CTkButton(
             left, text="Analyze Videos", height=30,
             fg_color=self._c("accent"), hover_color=self._c("accent_hover"),
             text_color="white", font=ctk.CTkFont(size=13, weight="bold"),
             corner_radius=8, command=self._run_analysis,
         )
-        self._analyze_btn.pack(fill="x", padx=4, pady=(15, 12))
-        
-        # Frame Navigator
+        self._analyze_btn.pack(fill="x", padx=4, pady=(15, 4))
+
         self._section_label(left, "Frame Navigator")
         self._frame_info = ctk.CTkLabel(left, text="Frame: 1 / —",
                                          text_color=self._c("text"),
@@ -100,21 +98,6 @@ class CompareTab(ctk.CTkFrame):
                                             fg_color=self._c("surface2"))
         self._frame_slider.pack(fill="x", padx=4, pady=(0, 4))
 
-        # nav = ctk.CTkFrame(left, fg_color="transparent")
-        # nav.pack(fill="x", padx=4, pady=(2, 8))
-        # nav.grid_columnconfigure((0, 1), weight=1)
-        # ctk.CTkButton(nav, text="◀ Prev", height=32,
-        #                fg_color=self._c("surface3"), text_color=self._c("text"),
-        #                hover_color=self._c("surface2"), font=ctk.CTkFont(size=11),
-        #                corner_radius=6,
-        #                command=lambda: self._step_frame(-1)).grid(row=0, column=0, sticky="ew", padx=(0, 3))
-        # ctk.CTkButton(nav, text="Next ▶", height=32,
-        #                fg_color=self._c("surface3"), text_color=self._c("text"),
-        #                hover_color=self._c("surface2"), font=ctk.CTkFont(size=11),
-        #                corner_radius=6,
-        #                command=lambda: self._step_frame(1)).grid(row=0, column=1, sticky="ew", padx=(3, 0))
-
-        # Frame Matrics
         self._section_label(left, "Frame Metrics")
         self._fm_psnr = StringVar(value="PSNR: —")
         self._fm_mse  = StringVar(value="MSE:  —")
@@ -124,7 +107,6 @@ class CompareTab(ctk.CTkFrame):
                           font=ctk.CTkFont(size=13, weight="bold"),
                           fg_color="transparent", anchor="w").pack(fill="x", padx=4, pady=2)
 
-        # Video Sumary
         self._section_label(left, "Video Summary")
         mg = ctk.CTkFrame(left, fg_color="transparent")
         mg.pack(fill="x", padx=4)
@@ -151,17 +133,6 @@ class CompareTab(ctk.CTkFrame):
 
         ctk.CTkFrame(left, fg_color="transparent", height=16).pack()
 
-        # ctk.CTkButton(left, text="Export Histogram PNG", height=34,
-        #                fg_color=self._c("surface3"), text_color=self._c("muted"),
-        #                hover_color=self._c("surface2"), font=ctk.CTkFont(size=11),
-        #                corner_radius=6,
-        #                command=self._export_hist_png).pack(fill="x", padx=4, pady=(0, 4))
-        # ctk.CTkButton(left, text="Export Metrics CSV", height=34,
-        #                fg_color=self._c("surface3"), text_color=self._c("muted"),
-        #                hover_color=self._c("surface2"), font=ctk.CTkFont(size=11),
-        #                corner_radius=6,
-        #                command=self._export_csv).pack(fill="x", padx=4)
-
     def _build_charts(self):
         right = ctk.CTkFrame(self, corner_radius=0, fg_color=self._c("bg"))
         right.grid(row=0, column=1, sticky="nsew", padx=(6, 12), pady=12)
@@ -187,8 +158,6 @@ class CompareTab(ctk.CTkFrame):
         self._hist_frame_lbl = ctk.CTkLabel(top_row, text="", text_color=self._c("accent"),
                                             font=ctk.CTkFont(size=10), fg_color="transparent")
         self._hist_frame_lbl.pack(side="left", padx=(8, 0))
-
-        # Tombol download histogram di kanan atas
         ctk.CTkButton(top_row, text="Export Histogram PNG", width=70, height=24,
                     fg_color=self._c("surface3"), text_color=self._c("muted"),
                     hover_color=self._c("accent"), font=ctk.CTkFont(size=10),
@@ -210,9 +179,7 @@ class CompareTab(ctk.CTkFrame):
         psnr_top.pack(fill="x", padx=14, pady=(10, 0))
         ctk.CTkLabel(psnr_top, text="PSNR PER FRAME", text_color=self._c("muted"),
                     font=ctk.CTkFont(size=9), fg_color="transparent").pack(side="left")
-
-        # Tombol download PSNR chart di kanan atas
-        ctk.CTkButton(psnr_top, text= "Export Metrics CSV", width=70, height=24,
+        ctk.CTkButton(psnr_top, text="Export Metrics CSV", width=70, height=24,
                     fg_color=self._c("surface3"), text_color=self._c("muted"),
                     hover_color=self._c("accent"), font=ctk.CTkFont(size=10),
                     corner_radius=6, command=self._export_csv).pack(side="right")
@@ -235,13 +202,39 @@ class CompareTab(ctk.CTkFrame):
             ax.xaxis.label.set_color(self._c("muted"))
             ax.yaxis.label.set_color(self._c("muted"))
 
+    def _reset(self):
+        self._cover_path.set("")
+        self._stego_path.set("")
+        self._cover_frames = None
+        self._stego_frames = None
+        self._psnr_list = []
+        self._mse_list = []
+        self._max_frames = 1
+        self._frame_idx.set(1)
+        self._frame_slider.configure(from_=1, to=2, number_of_steps=1)
+        self._frame_info.configure(text="Frame: 1 / —")
+        self._fm_psnr.set("PSNR: —")
+        self._fm_mse.set("MSE:  —")
+        self._avg_psnr_var.set("—")
+        self._avg_mse_var.set("—")
+        self._min_psnr_var.set("—")
+        self._max_mse_var.set("—")
+        self._hist_frame_lbl.configure(text="")
+        if HAS_MPL:
+            for ax in self._hist_axes:
+                ax.clear()
+                self._style_axes([ax])
+            self._hist_fig.canvas.draw_idle()
+            self._psnr_ax.clear()
+            self._style_axes([self._psnr_ax])
+            self._psnr_fig.canvas.draw_idle()
+
     def _browse_cover(self):
         path = filedialog.askopenfilename(title="Select cover video",
                                          filetypes=[("Video files", "*.avi *.mp4"),
                                                     ("AVI files", "*.avi"),
                                                     ("MP4 files", "*.mp4"),
-                                                    ("All files", "*.*"),
-                                                ])
+                                                    ("All files", "*.*")])
         if path:
             self._cover_path.set(path)
             self._cover_frames = None
@@ -251,8 +244,7 @@ class CompareTab(ctk.CTkFrame):
                                          filetypes=[("Video files", "*.avi *.mp4"),
                                                     ("AVI files", "*.avi"),
                                                     ("MP4 files", "*.mp4"),
-                                                    ("All files", "*.*"),
-                                                ])
+                                                    ("All files", "*.*")])
         if path:
             self._stego_path.set(path)
             self._stego_frames = None
@@ -266,11 +258,6 @@ class CompareTab(ctk.CTkFrame):
             if self._psnr_list:
                 self._fm_psnr.set(f"PSNR: {self._psnr_list[idx]:.2f} dB")
                 self._fm_mse.set(f"MSE:  {self._mse_list[idx]:.4f}")
-
-    def _step_frame(self, delta):
-        new = max(1, min(self._max_frames, self._frame_idx.get() + delta))
-        self._frame_idx.set(new)
-        self._on_frame_change()
 
     def _run_analysis(self):
         if not self._cover_path.get() or not self._stego_path.get():
@@ -300,7 +287,11 @@ class CompareTab(ctk.CTkFrame):
         self._psnr_list    = psnr_list
         self._mse_list     = mse_list
         self._max_frames   = len(cover_frames)
-        self._frame_slider.configure(from_=1, to=max(2, self._max_frames), number_of_steps=max(1, self._max_frames - 1))
+        self._frame_slider.configure(
+            from_=1,
+            to=max(2, self._max_frames),
+            number_of_steps=max(1, self._max_frames - 1)
+        )
         self._frame_idx.set(1)
         if psnr_list:
             finite_psnr = [p for p in psnr_list if p != float("inf")]
@@ -330,6 +321,7 @@ class CompareTab(ctk.CTkFrame):
         try:
             cover = self._cover_frames[frame_idx]
             stego = self._stego_frames[frame_idx]
+            mse_val = self._mse_list[frame_idx] if self._mse_list else None
             channel_data = [
                 ("#d94f4f", "Red",   0),
                 ("#0d9e6e", "Green", 1),
@@ -345,7 +337,12 @@ class CompareTab(ctk.CTkFrame):
                         color=color, alpha=0.35, label="Stego", linewidth=0)
                 ax.legend(fontsize=7, facecolor=self._c("surface2"),
                            edgecolor=self._c("border"), labelcolor=self._c("muted"))
-            self._hist_frame_lbl.configure(text=f"Frame #{frame_idx + 1}")
+            info = f"Frame #{frame_idx + 1}"
+            if mse_val is not None:
+                info += f"  |  MSE={mse_val:.4f}"
+                if mse_val == 0.0:
+                    info += "  (tidak ada perubahan pixel)"
+            self._hist_frame_lbl.configure(text=info)
             self._hist_fig.canvas.draw_idle()
         except Exception:
             pass
@@ -353,49 +350,28 @@ class CompareTab(ctk.CTkFrame):
     def _draw_psnr_chart(self):
         if not HAS_MPL or not self._psnr_list:
             return
-
         try:
             import math
-
             ax = self._psnr_ax
             ax.clear()
             self._style_axes([ax])
-
             frames = list(range(1, len(self._psnr_list) + 1))
-
-            # hanya untuk plotting: inf -> nan
             plot_psnr = [
                 float("nan") if (p == float("inf") or math.isinf(p)) else p
                 for p in self._psnr_list
             ]
-
-            # nilai finite untuk batas sumbu / garis rata-rata
             finite_psnr = [p for p in self._psnr_list if not math.isinf(p)]
-
-            # plot garis/titik
-            ax.plot(
-                frames,
-                plot_psnr,
-                linestyle="-",
-                marker="o",
-                markersize=4,
-            )
-
-            # atur batas dan avg
+            ax.plot(frames, plot_psnr, linestyle="-", marker="o", markersize=4)
             if finite_psnr:
                 avg = sum(finite_psnr) / len(finite_psnr)
                 ymin = min(finite_psnr) - 1
                 ymax = max(finite_psnr) + 1
-
                 ax.set_ylim(ymin, ymax)
                 ax.axhline(avg, linestyle="--", linewidth=1.0)
-
             ax.set_xlabel("Frame")
             ax.set_ylabel("dB")
             ax.set_title("PSNR per Frame")
-
             self._psnr_fig.canvas.draw_idle()
-
         except Exception:
             pass
 
@@ -428,16 +404,3 @@ class CompareTab(ctk.CTkFrame):
                     psnr_txt = "INF" if p == float("inf") else f"{p:.4f}"
                     f.write(f"{i},{psnr_txt},{m:.6f}\n")
             messagebox.showinfo("Saved", f"Metrics CSV saved to:\n{path}")
-
-    def _export_psnr_png(self):
-        if not HAS_MPL:
-            messagebox.showwarning("Not available", "matplotlib is required.")
-            return
-        if not self._psnr_list:
-            messagebox.showwarning("No data", "Run analysis first.")
-            return
-        path = filedialog.asksaveasfilename(title="Save PSNR chart", defaultextension=".png",
-                                            filetypes=[("PNG image", "*.png")])
-        if path:
-            self._psnr_fig.savefig(path, facecolor=self._c("surface"), dpi=150, bbox_inches="tight")
-            messagebox.showinfo("Saved", f"PSNR chart saved to:\n{path}")

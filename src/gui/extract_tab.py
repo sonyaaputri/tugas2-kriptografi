@@ -82,7 +82,6 @@ class ExtractTab(ctk.CTkFrame):
                                          anchor="w")
         self._stego_info.pack(fill="x", padx=4, pady=(4, 0))
 
-        # LSB Bit Allocation (optional)
         self._section_label(wrap, "LSB Scheme")
         self._know_scheme_switch = ctk.CTkSwitch(wrap, text="I know the LSB scheme",
                                                   command=self._on_scheme_toggle,
@@ -99,6 +98,7 @@ class ExtractTab(ctk.CTkFrame):
 
         ch_colors = {"R": self._c("red"), "G": self._c("green"), "B": self._c("blue")}
         lsb_vars = {"R": self._r_bits, "G": self._g_bits, "B": self._b_bits}
+        self._scheme_sliders = {}
 
         for col, ch in enumerate(("R", "G", "B")):
             cell = ctk.CTkFrame(self._scheme_frame, fg_color=self._c("surface2"),
@@ -111,14 +111,15 @@ class ExtractTab(ctk.CTkFrame):
                           text_color=ch_colors[ch],
                           font=ctk.CTkFont(size=20, weight="bold"),
                           fg_color="transparent").pack()
-            ctk.CTkSlider(cell, from_=1, to=4, number_of_steps=3,
+            sl = ctk.CTkSlider(cell, from_=1, to=4, number_of_steps=3,
                            variable=lsb_vars[ch],
                            progress_color=ch_colors[ch],
                            button_color=ch_colors[ch],
                            button_hover_color=ch_colors[ch],
                            fg_color=self._c("surface3"),
-                           state="disabled").pack(
-                               fill="x", padx=8, pady=(2, 8))
+                           state="disabled")
+            sl.pack(fill="x", padx=8, pady=(2, 8))
+            self._scheme_sliders[ch] = sl
 
         self._scheme_info = ctk.CTkLabel(wrap, text="Auto-detecting LSB scheme…",
                                           text_color=self._c("muted"),
@@ -209,9 +210,7 @@ class ExtractTab(ctk.CTkFrame):
     def _build_right(self):
         wrap = self._panel(self, col=2, padx=(6, 12))
 
-        # File Integrity
         self._section_label(wrap, "File Integrity")
-
         self._int_vars = {}
         for key, label in [("orig_md5", "Original MD5"),
                             ("ext_md5",  "Extracted MD5")]:
@@ -229,50 +228,21 @@ class ExtractTab(ctk.CTkFrame):
                           font=ctk.CTkFont(family="Courier New", size=9),
                           corner_radius=4, height=28).grid(row=0, column=1, sticky="ew")
 
-        # Label perbandingan MD5
         self._integrity_lbl = ctk.CTkLabel(wrap, text="",
                                             text_color=self._c("muted"),
                                             font=ctk.CTkFont(size=11, weight="bold"),
                                             fg_color="transparent", anchor="w")
         self._integrity_lbl.pack(fill="x", padx=4, pady=(8, 0))
 
-        # Quality Metrics
-        # self._section_label(wrap, "Quality Metrics")
-
-        # mg = ctk.CTkFrame(wrap, fg_color="transparent")
-        # mg.pack(fill="x", padx=4)
-        # mg.grid_columnconfigure((0, 1), weight=1)
-
         self._psnr_var   = StringVar(value="—")
         self._mse_var    = StringVar(value="—")
         self._frm_var    = StringVar(value="—")
         self._md5_status = StringVar(value="—")
 
-        cards_def = [
-            ("PSNR (dB)", self._psnr_var,   self._c("green"),  0, 0),
-            ("MSE",       self._mse_var,    self._c("accent"), 0, 1),
-            ("Frames",    self._frm_var,    self._c("text"),   1, 0),
-            ("MD5",       self._md5_status, self._c("muted"),  1, 1),
-        ]
-
         self._md5_value_label = ctk.CTkLabel(wrap, textvariable=self._md5_status,
                                       fg_color="transparent",
                                       text_color=self._c("muted"),
                                       font=ctk.CTkFont(size=1))
-
-        # for lbl, var, color, r, c in cards_def:
-        #     card = ctk.CTkFrame(mg, fg_color=self._c("surface2"), corner_radius=8,
-        #                          border_width=1, border_color=self._c("border"))
-        #     card.grid(row=r, column=c, padx=3, pady=3, sticky="ew", ipadx=8, ipady=6)
-        #     ctk.CTkLabel(card, text=lbl, text_color=self._c("muted"),
-        #                   font=ctk.CTkFont(size=10), fg_color="transparent",
-        #                   anchor="w").pack(anchor="w")
-        #     val_lbl = ctk.CTkLabel(card, textvariable=var, text_color=color,
-        #                             font=ctk.CTkFont(size=18, weight="bold"),
-        #                             fg_color="transparent", anchor="w")
-        #     val_lbl.pack(anchor="w")
-        #     if lbl == "MD5":
-        #         self._md5_value_label = val_lbl
 
         self._section_label(wrap, "Extract Log")
         self._log_box = ctk.CTkTextbox(wrap, height=180,
@@ -285,6 +255,42 @@ class ExtractTab(ctk.CTkFrame):
         self._log_box.pack(fill="both", expand=True, padx=4)
         self._log("Waiting for stego-video…")
 
+    def _reset(self):
+        self._stego_path.set("")
+        self._dec_key.set("")
+        self._stego_key.set("")
+        self._r_bits.set(3)
+        self._g_bits.set(3)
+        self._b_bits.set(2)
+        self._progress.set(0)
+        self._stego_info.configure(text="")
+        self._enc_switch.deselect()
+        self._dec_key_entry.configure(state="disabled")
+        self._rand_switch.deselect()
+        self._stego_key_entry.configure(state="disabled")
+        self._know_scheme_switch.deselect()
+        self._scheme_info.configure(text="Auto-detecting LSB scheme…")
+        for sl in self._scheme_sliders.values():
+            sl.configure(state="disabled")
+        self._extracted_bytes = None
+        self._extracted_meta = {}
+        self._result_type_lbl.configure(text="Type: —")
+        self._msg_result.configure(state="normal")
+        self._msg_result.delete("1.0", "end")
+        self._msg_result.configure(state="disabled")
+        self._save_btn.configure(state="disabled",
+                                  fg_color=self._c("surface3"),
+                                  text_color=self._c("muted"))
+        for key in self._meta_vars:
+            self._meta_vars[key].set("—")
+        self._int_vars["orig_md5"].set("—")
+        self._int_vars["ext_md5"].set("—")
+        self._integrity_lbl.configure(text="", text_color=self._c("muted"))
+        self._psnr_var.set("—")
+        self._mse_var.set("—")
+        self._frm_var.set("—")
+        self._log("Form direset ke kondisi awal.")
+
     def _on_enc_toggle(self):
         state = "normal" if self._enc_switch.get() else "disabled"
         self._dec_key_entry.configure(state=state)
@@ -294,13 +300,9 @@ class ExtractTab(ctk.CTkFrame):
         self._stego_key_entry.configure(state=state)
 
     def _on_scheme_toggle(self):
-        """Enable/disable LSB scheme sliders based on toggle state."""
         is_checked = self._know_scheme_switch.get()
-        # Find and update all sliders in scheme frame
-        for widget in self._scheme_frame.winfo_children():
-            for child in widget.winfo_children():
-                if isinstance(child, ctk.CTkSlider):
-                    child.configure(state="normal" if is_checked else "disabled")
+        for sl in self._scheme_sliders.values():
+            sl.configure(state="normal" if is_checked else "disabled")
 
     def _browse_stego(self):
         path = filedialog.askopenfilename(
@@ -417,13 +419,10 @@ class ExtractTab(ctk.CTkFrame):
         if self._extracted_bytes:
             ext_md5 = hashlib.md5(self._extracted_bytes).hexdigest()
             self._int_vars["ext_md5"].set(ext_md5[:24] + "…")
-
             orig_md5 = meta.get("orig_md5", "")
-
             if orig_md5:
                 self._int_vars["orig_md5"].set(orig_md5[:24] + "…")
                 md5_match = (orig_md5 == ext_md5)
-
                 if md5_match:
                     self._integrity_lbl.configure(
                         text="✔  MD5 match - file intact",
@@ -436,13 +435,9 @@ class ExtractTab(ctk.CTkFrame):
                         text_color=self._c("red"))
                     self._md5_status.set("✗")
                     self._md5_value_label.configure(text_color=self._c("red"))
-
-                self._log(
-                    f"MD5 orig     : {orig_md5[:16]}…")
-                self._log(
-                    f"MD5 extracted: {ext_md5[:16]}…")
-                self._log(
-                    f"Integrity    : {'MATCH ✓' if md5_match else 'MISMATCH ✗'}")
+                self._log(f"MD5 orig     : {orig_md5[:16]}…")
+                self._log(f"MD5 extracted: {ext_md5[:16]}…")
+                self._log(f"Integrity    : {'MATCH ✓' if md5_match else 'MISMATCH ✗'}")
             else:
                 self._integrity_lbl.configure(
                     text="No original MD5 in metadata",
