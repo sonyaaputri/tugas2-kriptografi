@@ -300,7 +300,7 @@ class CompareTab(ctk.CTkFrame):
         self._psnr_list    = psnr_list
         self._mse_list     = mse_list
         self._max_frames   = len(cover_frames)
-        self._frame_slider.configure(to=self._max_frames)
+        self._frame_slider.configure(from_=1, to=max(2, self._max_frames), number_of_steps=max(1, self._max_frames - 1))
         self._frame_idx.set(1)
         if psnr_list:
             finite_psnr = [p for p in psnr_list if p != float("inf")]
