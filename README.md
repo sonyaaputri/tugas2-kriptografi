@@ -1,6 +1,6 @@
 # StegoAVI — Video Steganography using LSB and A5/1 Encryption
 
-Proyek ini adalah aplikasi desktop yang dikembangkan dengan Python untuk menyembunyikan pesan di dalam file video menggunakan steganografi Least Significant Bit (LSB), dengan enkripsi A5/1 opsional.
+Projek ini adalah aplikasi desktop yang dikembangkan dengan Python untuk menyembunyikan pesan di dalam file video menggunakan steganografi Least Significant Bit (LSB), dengan enkripsi A5/1.
 
 ---
 
@@ -29,7 +29,7 @@ Proyek ini adalah aplikasi desktop yang dikembangkan dengan Python untuk menyemb
 Bit pesan disematkan ke dalam bit paling signifikan dari nilai piksel dalam frame video.
 
 ### Random Insertion
-Posisi piksel dikocok menggunakan stego-key untuk meningkatkan keamanan.
+Posisi piksel diacak menggunakan stego-key untuk meningkatkan keamanan.
 
 ### A5/1 Encryption
 Sebelum penyisipan, payload dapat dienkripsi menggunakan A5/1 stream cipher dengan kunci 64-bit.
