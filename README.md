@@ -76,6 +76,9 @@ pip install -r requirements.txt
 ---
 
 ## How to use
+```bash
+python main.py
+```
 
 **Embed Tab**
 - Pilih video cover
